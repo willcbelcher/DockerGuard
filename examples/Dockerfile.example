@@ -1,0 +1,21 @@
+# Example Dockerfile with various security issues for testing
+FROM ubuntu:latest
+
+# Issue: Using 'latest' tag (DG003)
+
+# Issue: Running as root (DG001)
+RUN apt-get update && apt-get install -y curl
+
+# Issue: Hardcoded secret (DG002, SECRET)
+ENV API_KEY=sk_live_1234567890abcdef
+ENV PASSWORD=mysecretpassword123
+
+# Issue: Potential secret in ARG
+ARG DB_PASSWORD=changeme
+
+# Copy application
+COPY app.py /app/
+
+# Run application as root (no USER instruction)
+CMD ["python", "/app/app.py"]
+

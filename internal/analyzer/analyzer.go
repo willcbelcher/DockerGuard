@@ -20,13 +20,20 @@ type Analyzer struct {
 }
 
 // NewAnalyzer creates a new analyzer instance
-func NewAnalyzer(verbose bool) *Analyzer {
+func NewAnalyzer(verbose bool, rulesPath string) (*Analyzer, error) {
+	engine := rules.NewEngine()
+	if rulesPath != "" {
+		if err := engine.LoadRules(rulesPath); err != nil {
+			return nil, err
+		}
+	}
+
 	return &Analyzer{
 		verbose:    verbose,
-		ruleEngine: rules.NewEngine(),
+		ruleEngine: engine,
 		registry:   registry.NewClient(),
 		secretScan: secrets.NewScanner(),
-	}
+	}, nil
 }
 
 // Analyze performs analysis on the given Dockerfile

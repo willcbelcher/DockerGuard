@@ -27,9 +27,14 @@ and leaked secrets before building images.`,
 
 func runAnalyze(cmd *cobra.Command, args []string) error {
 	filePath, _ := cmd.Flags().GetString("file")
+	rulesPath, _ := cmd.Flags().GetString("rules")
 	verbose, _ := cmd.Flags().GetBool("verbose")
 
-	analyzer := analyzer.NewAnalyzer(verbose)
+	analyzer, err := analyzer.NewAnalyzer(verbose, rulesPath)
+	if err != nil {
+		return err
+	}
+
 	results, err := analyzer.Analyze(filePath)
 	if err != nil {
 		return err

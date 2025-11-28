@@ -2,10 +2,12 @@ package rules
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/dockerguard/dockerguard/internal/dockerfile"
 	"github.com/dockerguard/dockerguard/internal/types"
+	"gopkg.in/yaml.v3"
 )
 
 // Engine manages and executes security rules
@@ -54,31 +56,31 @@ func (e *Engine) registerDefaultRules() {
 		Severity:    "high",
 		Check: func(df *dockerfile.Dockerfile) []types.Result {
 			var results []types.Result
-			hasUser := false
+			effectiveUser := "root" // Default to root
+			lastUserLine := 0
+			lastUserContext := ""
 
 			for _, inst := range df.Instructions {
 				if inst.Type == "USER" {
-					hasUser = true
-					// Check if user is root
-					if strings.Contains(inst.Args, "root") || inst.Args == "0" {
-						results = append(results, types.Result{
-							Severity: "high",
-							RuleID:   "DG001",
-							Message:  "Container runs as root user",
-							Line:     inst.Line,
-							Context:  inst.Raw,
-						})
-					}
+					effectiveUser = inst.Args
+					lastUserLine = inst.Line
+					lastUserContext = inst.Raw
 				}
 			}
 
-			if !hasUser {
+			// Check if the final effective user is root
+			if strings.Contains(effectiveUser, "root") || effectiveUser == "0" {
+				message := "Container runs as root user"
+				if lastUserLine == 0 {
+					message = "No USER instruction found - container will run as root"
+				}
+
 				results = append(results, types.Result{
 					Severity: "high",
 					RuleID:   "DG001",
-					Message:  "No USER instruction found - container will run as root",
-					Line:     0,
-					Context:  "",
+					Message:  message,
+					Line:     lastUserLine,
+					Context:  lastUserContext,
 				})
 			}
 
@@ -97,6 +99,16 @@ func (e *Engine) registerDefaultRules() {
 
 			for _, inst := range df.Instructions {
 				if inst.Type == "ENV" || inst.Type == "ARG" {
+					// Skip if it looks like a variable reference (e.g. $VAR or ${VAR})
+					if strings.Contains(inst.Args, "$") {
+						continue
+					}
+
+					// Skip ARG declarations without default value (e.g. ARG API_KEY)
+					if inst.Type == "ARG" && !strings.Contains(inst.Args, "=") {
+						continue
+					}
+
 					lowerArgs := strings.ToLower(inst.Args)
 					for _, keyword := range secretKeywords {
 						if strings.Contains(lowerArgs, keyword) {
@@ -107,6 +119,8 @@ func (e *Engine) registerDefaultRules() {
 								Line:     inst.Line,
 								Context:  inst.Raw,
 							})
+							// Stop checking keywords for this instruction to avoid duplicates
+							break
 						}
 					}
 				}
@@ -141,5 +155,71 @@ func (e *Engine) registerDefaultRules() {
 			return results
 		},
 	})
+}
+
+// CustomRuleConfig represents the YAML structure for custom rules
+type CustomRuleConfig struct {
+	Rules []CustomRule `yaml:"rules"`
+}
+
+// CustomRule represents a single rule in the YAML config
+type CustomRule struct {
+	ID          string `yaml:"id"`
+	Description string `yaml:"description"`
+	Severity    string `yaml:"severity"`
+	Pattern     string `yaml:"pattern"`
+	Type        string `yaml:"type"` // Optional: limit to specific instruction type
+}
+
+// LoadRules loads custom rules from a YAML file
+func (e *Engine) LoadRules(path string) error {
+	if path == "" {
+		return nil
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read rules file: %w", err)
+	}
+
+	var config CustomRuleConfig
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("failed to parse rules file: %w", err)
+	}
+
+	for _, cr := range config.Rules {
+		// Capture variable for closure
+		ruleConfig := cr
+		
+		e.rules = append(e.rules, Rule{
+			ID:          ruleConfig.ID,
+			Description: ruleConfig.Description,
+			Severity:    ruleConfig.Severity,
+			Check: func(df *dockerfile.Dockerfile) []types.Result {
+				var results []types.Result
+				
+				for _, inst := range df.Instructions {
+					// Filter by type if specified
+					if ruleConfig.Type != "" && inst.Type != ruleConfig.Type {
+						continue
+					}
+
+					// Check pattern
+					if strings.Contains(inst.Raw, ruleConfig.Pattern) {
+						results = append(results, types.Result{
+							Severity: ruleConfig.Severity,
+							RuleID:   ruleConfig.ID,
+							Message:  ruleConfig.Description,
+							Line:     inst.Line,
+							Context:  inst.Raw,
+						})
+					}
+				}
+				return results
+			},
+		})
+	}
+
+	return nil
 }
 

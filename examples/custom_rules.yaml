@@ -1,0 +1,12 @@
+rules:
+  - id: "CUSTOM001"
+    description: "Do not use curl"
+    severity: "medium"
+    pattern: "curl"
+    type: "RUN"
+
+  - id: "CUSTOM002"
+    description: "Deprecated instruction: MAINTAINER"
+    severity: "low"
+    pattern: "MAINTAINER"
+    type: "MAINTAINER"

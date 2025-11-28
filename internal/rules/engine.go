@@ -2,12 +2,10 @@ package rules
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/dockerguard/dockerguard/internal/dockerfile"
 	"github.com/dockerguard/dockerguard/internal/types"
-	"gopkg.in/yaml.v3"
 )
 
 // Engine manages and executes security rules
@@ -157,69 +155,5 @@ func (e *Engine) registerDefaultRules() {
 	})
 }
 
-// CustomRuleConfig represents the YAML structure for custom rules
-type CustomRuleConfig struct {
-	Rules []CustomRule `yaml:"rules"`
-}
 
-// CustomRule represents a single rule in the YAML config
-type CustomRule struct {
-	ID          string `yaml:"id"`
-	Description string `yaml:"description"`
-	Severity    string `yaml:"severity"`
-	Pattern     string `yaml:"pattern"`
-	Type        string `yaml:"type"` // Optional: limit to specific instruction type
-}
-
-// LoadRules loads custom rules from a YAML file
-func (e *Engine) LoadRules(path string) error {
-	if path == "" {
-		return nil
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("failed to read rules file: %w", err)
-	}
-
-	var config CustomRuleConfig
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return fmt.Errorf("failed to parse rules file: %w", err)
-	}
-
-	for _, cr := range config.Rules {
-		// Capture variable for closure
-		ruleConfig := cr
-		
-		e.rules = append(e.rules, Rule{
-			ID:          ruleConfig.ID,
-			Description: ruleConfig.Description,
-			Severity:    ruleConfig.Severity,
-			Check: func(df *dockerfile.Dockerfile) []types.Result {
-				var results []types.Result
-				
-				for _, inst := range df.Instructions {
-					// Filter by type if specified
-					if ruleConfig.Type != "" && inst.Type != ruleConfig.Type {
-						continue
-					}
-
-					// Check pattern
-					if strings.Contains(inst.Raw, ruleConfig.Pattern) {
-						results = append(results, types.Result{
-							Severity: ruleConfig.Severity,
-							RuleID:   ruleConfig.ID,
-							Message:  ruleConfig.Description,
-							Line:     inst.Line,
-							Context:  inst.Raw,
-						})
-					}
-				}
-				return results
-			},
-		})
-	}
-
-	return nil
-}
 

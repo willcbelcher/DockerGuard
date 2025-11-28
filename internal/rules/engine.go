@@ -124,6 +124,10 @@ func (e *Engine) registerDefaultRules() {
 		Check: func(df *dockerfile.Dockerfile) []types.Result {
 			var results []types.Result
 
+			if df.BaseImage == "" {
+				return results
+			}
+
 			if strings.HasSuffix(df.BaseImage, ":latest") || !strings.Contains(df.BaseImage, ":") {
 				results = append(results, types.Result{
 					Severity: "medium",

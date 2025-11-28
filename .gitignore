@@ -1,5 +1,5 @@
 # Binaries
-dockerguard
+/dockerguard
 dockerguard.exe
 *.exe
 *.dll

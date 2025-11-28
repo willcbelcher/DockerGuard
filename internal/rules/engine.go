@@ -54,31 +54,31 @@ func (e *Engine) registerDefaultRules() {
 		Severity:    "high",
 		Check: func(df *dockerfile.Dockerfile) []types.Result {
 			var results []types.Result
-			hasUser := false
+			effectiveUser := "root" // Default to root
+			lastUserLine := 0
+			lastUserContext := ""
 
 			for _, inst := range df.Instructions {
 				if inst.Type == "USER" {
-					hasUser = true
-					// Check if user is root
-					if strings.Contains(inst.Args, "root") || inst.Args == "0" {
-						results = append(results, types.Result{
-							Severity: "high",
-							RuleID:   "DG001",
-							Message:  "Container runs as root user",
-							Line:     inst.Line,
-							Context:  inst.Raw,
-						})
-					}
+					effectiveUser = inst.Args
+					lastUserLine = inst.Line
+					lastUserContext = inst.Raw
 				}
 			}
 
-			if !hasUser {
+			// Check if the final effective user is root
+			if strings.Contains(effectiveUser, "root") || effectiveUser == "0" {
+				message := "Container runs as root user"
+				if lastUserLine == 0 {
+					message = "No USER instruction found - container will run as root"
+				}
+
 				results = append(results, types.Result{
 					Severity: "high",
 					RuleID:   "DG001",
-					Message:  "No USER instruction found - container will run as root",
-					Line:     0,
-					Context:  "",
+					Message:  message,
+					Line:     lastUserLine,
+					Context:  lastUserContext,
 				})
 			}
 
@@ -97,6 +97,16 @@ func (e *Engine) registerDefaultRules() {
 
 			for _, inst := range df.Instructions {
 				if inst.Type == "ENV" || inst.Type == "ARG" {
+					// Skip if it looks like a variable reference (e.g. $VAR or ${VAR})
+					if strings.Contains(inst.Args, "$") {
+						continue
+					}
+
+					// Skip ARG declarations without default value (e.g. ARG API_KEY)
+					if inst.Type == "ARG" && !strings.Contains(inst.Args, "=") {
+						continue
+					}
+
 					lowerArgs := strings.ToLower(inst.Args)
 					for _, keyword := range secretKeywords {
 						if strings.Contains(lowerArgs, keyword) {
@@ -107,6 +117,8 @@ func (e *Engine) registerDefaultRules() {
 								Line:     inst.Line,
 								Context:  inst.Raw,
 							})
+							// Stop checking keywords for this instruction to avoid duplicates
+							break
 						}
 					}
 				}
@@ -124,6 +136,10 @@ func (e *Engine) registerDefaultRules() {
 		Check: func(df *dockerfile.Dockerfile) []types.Result {
 			var results []types.Result
 
+			if df.BaseImage == "" {
+				return results
+			}
+
 			if strings.HasSuffix(df.BaseImage, ":latest") || !strings.Contains(df.BaseImage, ":") {
 				results = append(results, types.Result{
 					Severity: "medium",
@@ -138,4 +154,6 @@ func (e *Engine) registerDefaultRules() {
 		},
 	})
 }
+
+
 

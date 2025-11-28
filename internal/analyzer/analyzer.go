@@ -54,11 +54,27 @@ func (a *Analyzer) Analyze(filePath string) ([]types.Result, error) {
 
 	// Check base image vulnerabilities
 	if df.BaseImage != "" {
-		vulnResults, err := a.registry.CheckBaseImage(df.BaseImage)
-		if err != nil && a.verbose {
-			fmt.Printf("Warning: Could not check base image %s: %v\n", df.BaseImage, err)
+		baseDf, err := a.registry.CheckBaseImage(df.BaseImage)
+		if err != nil {
+			if a.verbose {
+				fmt.Printf("Warning: Could not check base image %s: %v\n", df.BaseImage, err)
+			}
+		} else {
+			// Recursively analyze the base image
+			// Run rule-based checks on base image
+			baseRuleResults := a.ruleEngine.Check(baseDf)
+			for _, res := range baseRuleResults {
+				res.Message = fmt.Sprintf("[Base Image: %s] %s", df.BaseImage, res.Message)
+				results = append(results, res)
+			}
+
+			// Check for secrets in base image
+			baseSecretResults := a.secretScan.Scan(baseDf)
+			for _, res := range baseSecretResults {
+				res.Message = fmt.Sprintf("[Base Image: %s] %s", df.BaseImage, res.Message)
+				results = append(results, res)
+			}
 		}
-		results = append(results, vulnResults...)
 	}
 
 	return results, nil

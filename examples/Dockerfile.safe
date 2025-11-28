@@ -1,0 +1,14 @@
+# Example Dockerfile with safe secret usage
+FROM ubuntu:latest
+
+# Safe: Declaring ARG without value
+ARG API_KEY
+
+# Safe: Assigning ENV from ARG (variable reference)
+ENV API_KEY=${API_KEY}
+
+# Safe: Running as non-root
+RUN useradd -m appuser
+USER appuser
+
+CMD ["echo", "Secrets are safe!"]

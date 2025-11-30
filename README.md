@@ -7,9 +7,20 @@ This project is for CS2630, Systems Security at Harvard University.
 ## Features
 
 - **Static Analysis**: Analyzes Dockerfiles for security issues before building images
-- **Rule Engine**: Configurable security rules for fine-grained control
-- **Secret Detection**: Detects hardcoded secrets, API keys, passwords, and private keys
-- **Base Image Analysis**: Checks base images for known vulnerabilities (via Docker Registry API)
+- **Comprehensive Rule Engine**: 12+ built-in security rules covering:
+  - User privileges and root access
+  - Secret management
+  - Package manager security
+  - Image tagging best practices
+  - File operations (COPY vs ADD)
+  - Container configuration
+- **Extensible Architecture**: Easy to add custom rules using helper functions
+- **Secret Detection**: Pattern-based detection of:
+  - AWS access keys
+  - API keys
+  - Private keys (PEM format)
+  - Passwords in environment variables
+- **Base Image Analysis**: Framework for checking base images for known vulnerabilities (via Docker Registry API - TODO)
 - **CI/CD Ready**: Command-line tool that can be integrated into build pipelines
 
 ## Prerequisites
@@ -19,7 +30,7 @@ This project is for CS2630, Systems Security at Harvard University.
 
 ## Setup
 
-1. **Clone the repository** (if not already done):
+1. **Clone the repository**:
    ```bash
    git clone git@github.com:willcbelcher/DockerGuard.git
    cd DockerGuard
@@ -104,6 +115,23 @@ Analyze a Dockerfile:
 
 # Enable verbose output
 ./dockerguard -v -f Dockerfile
+
+# Analyze example Dockerfile
+./dockerguard -f examples/Dockerfile.example
+```
+
+### Example Output
+
+```
+[high] DG001: No USER instruction found - container will run as root
+[critical] DG002: Potential secret found in ENV instruction
+  Line 5: ENV API_KEY=sk_live_1234567890abcdef
+[medium] DG003: Base image uses 'latest' tag or no tag specified
+[critical] SECRET: Potential AWS Access Key detected
+  Line 5: ENV API_KEY=sk_live_1234567890abcdef
+[medium] DG008: Use COPY instead of ADD for local files
+  Line 8: ADD app.py /app/
+[low] DG010: Consider adding HEALTHCHECK instruction for better container orchestration
 ```
 
 ## Project Structure
@@ -113,15 +141,33 @@ DockerGuard/
 ├── cmd/
 │   └── dockerguard/      # Main CLI entry point
 ├── internal/
-│   ├── analyzer/         # Core analysis engine
-│   ├── cli/              # CLI command definitions
-│   ├── dockerfile/       # Dockerfile parser
-│   ├── registry/         # Docker Registry API client
+│   ├── analyzer/         # Core analysis engine (orchestrates all checks)
+│   ├── cli/              # CLI command definitions (Cobra-based)
+│   ├── dockerfile/       # Dockerfile parser (converts text to structured format)
+│   ├── registry/         # Docker Registry API client (base image vulnerability checks)
 │   ├── rules/            # Security rule engine
-│   └── secrets/          # Secret detection scanner
+│   │   ├── engine.go     # Rule engine and rule definitions
+│   │   └── helpers.go    # Helper functions for rule creation
+│   ├── secrets/          # Secret detection scanner (regex-based)
+│   └── types/            # Shared types (prevents import cycles)
+├── examples/             # Example Dockerfiles for testing
+├── sample_data/          # Sample Dockerfiles from real projects
 ├── go.mod                # Go module definition
+├── Makefile              # Build automation
 └── README.md
 ```
+
+### Architecture Overview
+
+1. **Entry Point** (`cmd/dockerguard/main.go`): Initializes CLI and handles errors
+2. **CLI Layer** (`internal/cli/`): Parses user input, invokes analyzer, formats output
+3. **Orchestration Layer** (`internal/analyzer/`): Coordinates all analysis components
+4. **Analysis Components**:
+   - **Parser** (`internal/dockerfile/`): Converts Dockerfile text to structured data
+   - **Rule Engine** (`internal/rules/`): Executes security rules
+   - **Secret Scanner** (`internal/secrets/`): Pattern-based secret detection
+   - **Registry Client** (`internal/registry/`): Base image vulnerability checks (TODO)
+5. **Shared Types** (`internal/types/`): Common data structures
 
 ## Development
 
@@ -146,20 +192,132 @@ GOOS=windows GOARCH=amd64 go build -o dockerguard.exe ./cmd/dockerguard
 
 ## Security Rules
 
-DockerGuard includes several built-in security rules:
+DockerGuard includes a comprehensive set of built-in security rules organized by severity. The rule engine is designed to be easily extensible.
 
+### Rule Categories
+
+#### Critical Severity
+- **DG002**: Secrets should not be hardcoded in ENV/ARG instructions
+  - Detects potential secrets in environment variables and build arguments
+  - Keywords: password, secret, key, token, api_key, credential, auth
+
+#### High Severity
 - **DG001**: Container should not run as root user
-- **DG002**: Secrets should not be hardcoded in ENV instructions
+  - Checks if container runs as root (UID 0) or if no USER instruction is present
+- **DG004**: RUN instructions should not contain privilege escalation
+  - Detects use of `sudo` or `su` commands in RUN instructions
+
+#### Medium Severity
 - **DG003**: Base image should not use 'latest' tag
-- **SECRET**: Detects various secret patterns (AWS keys, API keys, private keys, passwords)
+  - Warns when base image uses `:latest` tag or no tag (reduces reproducibility)
+- **DG005**: Package managers should use security best practices
+  - Checks for `apt-get install` without `--no-install-recommends` flag
+- **DG007**: Downloads should be verified with checksums or signatures
+  - Warns when `curl` or `wget` are used without verification (checksum, GPG, etc.)
+- **DG008**: Use COPY instead of ADD for local files
+  - Recommends COPY over ADD unless ADD's special features (URLs, tar extraction) are needed
+- **DG011**: WORKDIR should not be set to root directory
+  - Warns when WORKDIR is set to `/` or `/root`
+
+#### Low Severity
+- **DG006**: apt-get install should be combined with apt-get update
+  - Best practice reminder for package manager usage
+- **DG009**: EXPOSE should be documented and necessary
+  - Informational check for exposed ports
+- **DG010**: Consider adding HEALTHCHECK instruction
+  - Recommends adding healthcheck for better container orchestration
+- **DG012**: CMD/ENTRYPOINT should use exec form (JSON array)
+  - Recommends exec form `["cmd", "arg"]` over shell form for better signal handling
+
+### Secret Detection
+
+The secret scanner (SECRET) uses regex patterns to detect:
+- **AWS Access Keys**: `AKIA[0-9A-Z]{16}` pattern
+- **API Keys**: Generic patterns for `api_key`, `apikey` with values
+- **Private Keys**: PEM format private keys (RSA, DSA, EC, OpenSSH)
+- **Passwords**: Password patterns in environment variables
+
+### Extending Rules
+
+The rule engine is designed for easy extension. To add a new rule:
+
+1. **Create a check function** in `internal/rules/engine.go`:
+   ```go
+   func (e *Engine) checkYourNewRule(df *dockerfile.Dockerfile) []types.Result {
+       var results []types.Result
+       // Your rule logic here
+       return results
+   }
+   ```
+
+2. **Register the rule** in `registerDefaultRules()`:
+   ```go
+   e.registerRule("DG013", "Your rule description", "severity", e.checkYourNewRule)
+   ```
+
+3. **Use helper functions** from `helpers.go`:
+   - `findInstructions()` - Find specific instruction types
+   - `hasInstruction()` - Check if instruction exists
+   - `getEffectiveUser()` - Get the effective user
+   - `isRootUser()` - Check if user is root
+   - `createResult()` - Create standardized results
+
+Example rule implementation:
+```go
+func (e *Engine) checkExampleRule(df *dockerfile.Dockerfile) []types.Result {
+    var results []types.Result
+    
+    for _, inst := range df.Instructions {
+        if inst.Type == "RUN" && strings.Contains(inst.Args, "insecure-pattern") {
+            results = append(results, createResult(
+                "DG013",
+                "high",
+                "Found insecure pattern in RUN instruction",
+                inst.Line,
+                inst.Raw,
+            ))
+        }
+    }
+    
+    return results
+}
+```
+
+## Quick Reference
+
+### Rule IDs
+
+| ID | Severity | Description |
+|----|----------|-------------|
+| DG001 | High | Container runs as root user |
+| DG002 | Critical | Hardcoded secrets in ENV/ARG |
+| DG003 | Medium | Base image uses 'latest' tag |
+| DG004 | High | Privilege escalation in RUN |
+| DG005 | Medium | Insecure package manager usage |
+| DG006 | Low | apt-get update best practice |
+| DG007 | Medium | Unverified downloads |
+| DG008 | Medium | ADD vs COPY usage |
+| DG009 | Low | EXPOSE port documentation |
+| DG010 | Low | Missing HEALTHCHECK |
+| DG011 | Medium | WORKDIR set to root |
+| DG012 | Low | CMD/ENTRYPOINT form |
+| SECRET | Critical/High | Secret pattern detected |
+
+### Helper Functions Reference
+
+When creating custom rules, use these helper functions from `helpers.go`:
+
+- `findInstructions(df, type)` - Find all instructions of a type
+- `hasInstruction(df, type)` - Check if instruction type exists
+- `getEffectiveUser(df)` - Get the effective user (returns user, line, context)
+- `isRootUser(user)` - Check if user string is root
+- `containsPattern(text, patterns)` - Check if text matches regex patterns
+- `createResult(id, severity, message, line, context)` - Create standardized result
+- `checkRunInstruction(inst)` - Check RUN instruction for common issues
 
 ## Contributing
 
-This is a research project for CS2630. Contributions and improvements are welcome!
-
-## License
-
-[To be determined]
+This is a research project for COMPSCI 2630 taught by Professor James Mickens at Harvard University. Contributions and improvements are welcome!
 
 ## Authors
 

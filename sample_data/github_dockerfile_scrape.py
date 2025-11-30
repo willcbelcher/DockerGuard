@@ -147,6 +147,38 @@ def sanitize_filename(repo_name: str, path: str) -> str:
     return filename
 
 
+def file_exists(filename: str) -> bool:
+    """
+    Check if a file already exists on disk.
+    
+    Args:
+        filename: Base filename (will check with .dockerfile extension)
+    
+    Returns:
+        True if file exists, False otherwise
+    """
+    if not filename.endswith((".dockerfile", ".Dockerfile")):
+        filename = f"{filename}.dockerfile"
+    
+    filepath = OUTPUT_DIR / filename
+    if filepath.exists():
+        return True
+    
+    # Also check for numbered variants
+    base = Path(filename).stem
+    ext = Path(filename).suffix
+    counter = 1
+    while True:
+        variant_path = OUTPUT_DIR / f"{base}_{counter}{ext}"
+        if variant_path.exists():
+            return True
+        if counter > 10:  # Reasonable limit
+            break
+        counter += 1
+    
+    return False
+
+
 def save_dockerfile(content: str, filename: str) -> bool:
     """
     Save Dockerfile content to disk.
@@ -183,10 +215,48 @@ def save_dockerfile(content: str, filename: str) -> bool:
         return False
 
 
+def load_existing_metadata() -> tuple[List[Dict], set]:
+    """
+    Load existing metadata and return list of files and set of already-collected identifiers.
+    
+    Returns:
+        Tuple of (existing_files_list, set_of_collected_identifiers)
+    """
+    metadata_file = OUTPUT_DIR / "metadata.json"
+    existing_files = []
+    collected_identifiers = set()
+    
+    if metadata_file.exists():
+        try:
+            with open(metadata_file, "r") as f:
+                metadata = json.load(f)
+                existing_files = metadata.get("files", [])
+                # Create set of identifiers: repo + path
+                for file_info in existing_files:
+                    identifier = f"{file_info.get('repo', '')}:{file_info.get('path', '')}"
+                    collected_identifiers.add(identifier)
+                print(f"Loaded {len(existing_files)} existing files from metadata")
+        except Exception as e:
+            print(f"Warning: Could not load existing metadata: {e}")
+    
+    return existing_files, collected_identifiers
+
+
 def main():
     """Main scraping function."""
     print(f"Starting to scrape {TARGET_COUNT} Dockerfiles from GitHub...")
     print(f"Output directory: {OUTPUT_DIR}")
+    
+    # Load existing metadata
+    existing_files, collected_identifiers = load_existing_metadata()
+    total_collected = len(existing_files)
+    collected_files = existing_files.copy()
+    
+    print(f"Found {total_collected} existing files. Need {TARGET_COUNT - total_collected} more.")
+    
+    if total_collected >= TARGET_COUNT:
+        print(f"Already have {total_collected} files. Target of {TARGET_COUNT} reached!")
+        return
     
     if GITHUB_TOKEN:
         print("Using GitHub token for authentication (higher rate limits)")
@@ -196,9 +266,7 @@ def main():
     
     check_rate_limit()
     
-    collected_files = []
     page = 1
-    total_collected = 0
     
     while total_collected < TARGET_COUNT:
         print(f"\nFetching page {page}...")
@@ -233,6 +301,20 @@ def main():
                     print(f"  Skipping {repo_name}/{file_path}: filename is '{filename_only}' (not exactly 'Dockerfile')")
                     continue
                 
+                # Check if we've already collected this file
+                identifier = f"{repo_name}:{file_path}"
+                if identifier in collected_identifiers:
+                    print(f"  Skipping {repo_name}/{file_path}: already in metadata")
+                    continue
+                
+                # Also check if file already exists on disk (even if not in metadata)
+                potential_filename = sanitize_filename(repo_name, file_path)
+                if file_exists(potential_filename):
+                    print(f"  Skipping {repo_name}/{file_path}: file already exists on disk")
+                    # Add to collected set to avoid checking again
+                    collected_identifiers.add(identifier)
+                    continue
+                
                 print(f"  [{total_collected + 1}/{TARGET_COUNT}] Downloading: {repo_name}/{file_path}")
                 
                 # Download file content
@@ -252,12 +334,14 @@ def main():
                     if is_dockerfile:
                         filename = sanitize_filename(repo_name, file_path)
                         if save_dockerfile(content, filename):
-                            collected_files.append({
+                            file_info = {
                                 "repo": repo_name,
                                 "path": file_path,
                                 "url": html_url,
                                 "filename": filename
-                            })
+                            }
+                            collected_files.append(file_info)
+                            collected_identifiers.add(identifier)
                             total_collected += 1
                         else:
                             print(f"    Failed to save file")
@@ -291,15 +375,16 @@ def main():
             continue
     
     print(f"\n\nScraping complete!")
-    print(f"Successfully collected {total_collected} Dockerfiles")
+    print(f"Total Dockerfiles collected: {total_collected} (target: {TARGET_COUNT})")
     print(f"Files saved to: {OUTPUT_DIR}")
     
-    # Save metadata
+    # Save metadata (append/update with all collected files)
     metadata_file = OUTPUT_DIR / "metadata.json"
     with open(metadata_file, "w") as f:
         json.dump({
             "total_collected": total_collected,
             "collected_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "last_updated": time.strftime("%Y-%m-%d %H:%M:%S"),
             "files": collected_files
         }, f, indent=2)
     

@@ -227,6 +227,12 @@ def main():
                 file_url = item.get("url", "")
                 html_url = item.get("html_url", "")
                 
+                # Validate that filename is exactly "Dockerfile" with no extension
+                filename_only = Path(file_path).name
+                if filename_only != "Dockerfile":
+                    print(f"  Skipping {repo_name}/{file_path}: filename is '{filename_only}' (not exactly 'Dockerfile')")
+                    continue
+                
                 print(f"  [{total_collected + 1}/{TARGET_COUNT}] Downloading: {repo_name}/{file_path}")
                 
                 # Download file content

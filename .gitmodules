@@ -1,0 +1,3 @@
+[submodule "sample_data/jessfraz"]
+	path = sample_data/jessfraz
+	url = git@github.com:jessfraz/dockerfiles.git

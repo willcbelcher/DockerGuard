@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/dockerguard/dockerguard/internal/dockerfile"
-	"github.com/dockerguard/dockerguard/internal/rules"
-	"github.com/dockerguard/dockerguard/internal/registry"
-	"github.com/dockerguard/dockerguard/internal/secrets"
-	"github.com/dockerguard/dockerguard/internal/types"
+	"dockerguard/internal/dockerfile"
+	"dockerguard/internal/registry"
+	"dockerguard/internal/rules"
+	"dockerguard/internal/secrets"
+	"dockerguard/internal/types"
 )
 
 // Analyzer performs static analysis on Dockerfiles
@@ -79,4 +79,3 @@ func (a *Analyzer) Analyze(filePath string) ([]types.Result, error) {
 
 	return results, nil
 }
-

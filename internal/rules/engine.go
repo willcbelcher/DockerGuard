@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dockerguard/dockerguard/internal/dockerfile"
-	"github.com/dockerguard/dockerguard/internal/types"
+	"dockerguard/internal/dockerfile"
+	"dockerguard/internal/types"
 )
 
 // Engine manages and executes security rules
@@ -355,6 +355,3 @@ func (e *Engine) checkCmdForm(df *dockerfile.Dockerfile) []types.Result {
 
 	return results
 }
-
-
-

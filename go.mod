@@ -1,4 +1,4 @@
-module github.com/dockerguard/dockerguard
+module dockerguard
 
 go 1.21
 

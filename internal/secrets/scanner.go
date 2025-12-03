@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/dockerguard/dockerguard/internal/dockerfile"
-	"github.com/dockerguard/dockerguard/internal/types"
+	"dockerguard/internal/dockerfile"
+	"dockerguard/internal/types"
 )
 
 // Scanner detects secrets and sensitive information in Dockerfiles
@@ -15,8 +15,8 @@ type Scanner struct {
 
 // SecretPattern defines a pattern to detect secrets
 type SecretPattern struct {
-	Name    string
-	Pattern *regexp.Regexp
+	Name     string
+	Pattern  *regexp.Regexp
 	Severity string
 }
 
@@ -82,4 +82,3 @@ func (s *Scanner) registerPatterns() {
 		Severity: "high",
 	})
 }
-

@@ -3,7 +3,8 @@ package cli
 import (
 	"fmt"
 
-	"github.com/dockerguard/dockerguard/internal/analyzer"
+	"dockerguard/internal/analyzer"
+
 	"github.com/spf13/cobra"
 )
 
@@ -45,4 +46,3 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 
 	return nil
 }
-

@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/dockerguard/dockerguard/internal/cli"
+	"dockerguard/internal/cli"
+
 	"github.com/joho/godotenv"
 )
 

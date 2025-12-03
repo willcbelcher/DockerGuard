@@ -4,8 +4,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/dockerguard/dockerguard/internal/dockerfile"
-	"github.com/dockerguard/dockerguard/internal/types"
+	"dockerguard/internal/dockerfile"
+	"dockerguard/internal/types"
 )
 
 // Helper functions for rule creation
@@ -136,4 +136,3 @@ func checkRunInstruction(inst dockerfile.Instruction) []types.Result {
 
 	return results
 }
-

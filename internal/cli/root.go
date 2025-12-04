@@ -38,6 +38,11 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 
 	// Print results
 	for _, result := range results {
+		// Skip low severity if not verbose
+		if !verbose && result.Severity == "low" {
+			continue
+		}
+
 		fmt.Printf("[%s] %s: %s\n", result.Severity, result.RuleID, result.Message)
 		if result.Line > 0 {
 			fmt.Printf("  Line %d: %s\n", result.Line, result.Context)

@@ -56,9 +56,7 @@ func (a *Analyzer) Analyze(filePath string) ([]types.Result, error) {
 	if df.BaseImage != "" {
 		baseDf, err := a.registry.CheckBaseImage(df.BaseImage)
 		if err != nil {
-			if a.verbose {
-				fmt.Printf("Warning: Could not check base image %s: %v\n", df.BaseImage, err)
-			}
+			fmt.Printf("Warning: Could not check base image %s: %v\n", df.BaseImage, err)
 		} else {
 			// Recursively analyze the base image
 			// Run rule-based checks on base image

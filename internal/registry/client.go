@@ -36,15 +36,21 @@ func (c *Client) CheckBaseImage(image string) (*dockerfile.Dockerfile, error) {
 		return nil, err
 	}
 
+	// Get anonymous token
+	token, err := c.getToken(name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get token: %w", err)
+	}
+
 	// Get Image Manifest to find Config Digest
-	manifest, err := c.GetManifest(name, tag)
+	manifest, err := c.GetManifest(name, tag, token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get manifest: %w", err)
 	}
 
 	// Get image Config (history)
 	// Docker image config is a JSON blob that contains the history of the image, which has the Dockerfile instructions
-	config, err := c.GetImageConfig(name, manifest.Config.Digest)
+	config, err := c.GetImageConfig(name, manifest.Config.Digest, token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get image config: %w", err)
 	}
@@ -78,7 +84,7 @@ type Manifest struct {
 }
 
 // GetManifest fetches the image manifest, returns the manifest object
-func (c *Client) GetManifest(name, tag string) (*Manifest, error) {
+func (c *Client) GetManifest(name, tag, token string) (*Manifest, error) {
 	url := fmt.Sprintf("%s/%s/manifests/%s", c.baseURL, name, tag)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -87,6 +93,9 @@ func (c *Client) GetManifest(name, tag string) (*Manifest, error) {
 
 	// Accept V2 manifests and Manifest Lists
 	req.Header.Set("Accept", "application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -108,7 +117,7 @@ func (c *Client) GetManifest(name, tag string) (*Manifest, error) {
 	// If it's a manifest list, just pick the first one
 	// Maybe not the best approach, but simpler and easier, and gets at the heart of the actual Security concerns
 	if len(manifest.Manifests) > 0 {
-		return c.GetManifest(name, manifest.Manifests[0].Digest)
+		return c.GetManifest(name, manifest.Manifests[0].Digest, token)
 	}
 
 	return &manifest, nil
@@ -126,13 +135,17 @@ type ImageConfig struct {
 }
 
 // GetImageConfig fetches the image configuration blob
-func (c *Client) GetImageConfig(name, digest string) (*ImageConfig, error) {
+func (c *Client) GetImageConfig(name, digest, token string) (*ImageConfig, error) {
 
 	// Format url and make request
 	url := fmt.Sprintf("%s/%s/blobs/%s", c.baseURL, name, digest)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -169,4 +182,32 @@ func (c *Client) parseImage(image string) (name, tag string, err error) {
 	}
 
 	return imageName, tag, nil
+}
+
+// getToken fetches an anonymous token for the given repository
+func (c *Client) getToken(name string) (string, error) {
+	url := fmt.Sprintf("https://auth.docker.io/token?service=registry.docker.io&scope=repository:%s:pull", name)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to get token: %d", resp.StatusCode)
+	}
+
+	var tokenResp struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return "", err
+	}
+
+	return tokenResp.Token, nil
 }

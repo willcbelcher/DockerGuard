@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"dockerguard/internal/config"
 	"dockerguard/internal/dockerfile"
 	"dockerguard/internal/types"
 )
@@ -18,6 +19,7 @@ type Rule struct {
 	ID          string
 	Description string
 	Severity    string
+	Disabled    bool
 	Check       func(*dockerfile.Dockerfile) []types.Result
 }
 
@@ -38,7 +40,15 @@ func (e *Engine) Check(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
 	for _, rule := range e.rules {
+		if rule.Disabled {
+			continue
+		}
 		ruleResults := rule.Check(df)
+		// Update severity if needed (though we updated the rule struct itself, the result creation uses hardcoded severity strings in check functions)
+		// So we need to override the severity in the results
+		for i := range ruleResults {
+			ruleResults[i].Severity = rule.Severity
+		}
 		results = append(results, ruleResults...)
 	}
 
@@ -354,4 +364,19 @@ func (e *Engine) checkCmdForm(df *dockerfile.Dockerfile) []types.Result {
 	}
 
 	return results
+}
+
+// ApplyConfig applies configuration to the rules
+func (e *Engine) ApplyConfig(cfg *config.Config) {
+	for i := range e.rules {
+		rule := &e.rules[i]
+		if ruleConfig, ok := cfg.Rules[rule.ID]; ok {
+			if ruleConfig.Disabled {
+				rule.Disabled = true
+			}
+			if ruleConfig.Severity != "" {
+				rule.Severity = ruleConfig.Severity
+			}
+		}
+	}
 }

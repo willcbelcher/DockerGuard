@@ -20,7 +20,7 @@ and leaked secrets before building images.`,
 	}
 
 	cmd.Flags().StringP("file", "f", "Dockerfile", "Path to Dockerfile to analyze")
-	cmd.Flags().StringP("rules", "r", "", "Path to custom rules file (optional)")
+	cmd.Flags().StringP("config", "c", "", "Path to configuration file (optional)")
 	cmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
 
 	return cmd
@@ -28,9 +28,13 @@ and leaked secrets before building images.`,
 
 func runAnalyze(cmd *cobra.Command, args []string) error {
 	filePath, _ := cmd.Flags().GetString("file")
+	configPath, _ := cmd.Flags().GetString("config")
 	verbose, _ := cmd.Flags().GetBool("verbose")
 
-	analyzer := analyzer.NewAnalyzer(verbose)
+	analyzer, err := analyzer.NewAnalyzer(verbose, configPath)
+	if err != nil {
+		return err
+	}
 	results, err := analyzer.Analyze(filePath)
 	if err != nil {
 		return err

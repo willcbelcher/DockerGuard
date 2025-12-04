@@ -1,0 +1,5 @@
+rules:
+  DG001:
+    disabled: true
+  DG002:
+    severity: "low"

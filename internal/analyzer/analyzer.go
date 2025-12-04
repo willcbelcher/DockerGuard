@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"dockerguard/internal/config"
 	"dockerguard/internal/dockerfile"
 	"dockerguard/internal/registry"
 	"dockerguard/internal/rules"
@@ -20,13 +21,21 @@ type Analyzer struct {
 }
 
 // NewAnalyzer creates a new analyzer instance
-func NewAnalyzer(verbose bool) *Analyzer {
+func NewAnalyzer(verbose bool, configPath string) (*Analyzer, error) {
+	cfg, err := config.LoadConfig(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	engine := rules.NewEngine()
+	engine.ApplyConfig(cfg)
+
 	return &Analyzer{
 		verbose:    verbose,
-		ruleEngine: rules.NewEngine(),
+		ruleEngine: engine,
 		registry:   registry.NewClient(),
 		secretScan: secrets.NewScanner(),
-	}
+	}, nil
 }
 
 // Analyze performs analysis on the given Dockerfile

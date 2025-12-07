@@ -16,7 +16,6 @@ import (
 type Analyzer struct {
 	verbose    bool
 	ruleEngine *rules.Engine
-	registry   *registry.Client
 	secretScan *secrets.Scanner
 }
 
@@ -33,7 +32,6 @@ func NewAnalyzer(verbose bool, configPath string) (*Analyzer, error) {
 	return &Analyzer{
 		verbose:    verbose,
 		ruleEngine: engine,
-		registry:   registry.NewClient(),
 		secretScan: secrets.NewScanner(),
 	}, nil
 }
@@ -63,7 +61,7 @@ func (a *Analyzer) Analyze(filePath string) ([]types.Result, error) {
 
 	// Check base image vulnerabilities
 	if df.BaseImage != "" {
-		baseDf, err := a.registry.CheckBaseImage(df.BaseImage)
+		baseDf, err := registry.GetBaseImage(df.BaseImage)
 		if err != nil {
 			fmt.Printf("Warning: Could not check base image %s: %v\n", df.BaseImage, err)
 		} else {

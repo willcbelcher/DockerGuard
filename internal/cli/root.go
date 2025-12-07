@@ -1,9 +1,8 @@
 package cli
 
 import (
-	"fmt"
-
 	"dockerguard/internal/analyzer"
+	"fmt"
 
 	"github.com/spf13/cobra"
 )
@@ -51,6 +50,10 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 		if result.Line > 0 {
 			fmt.Printf("  Line %d: %s\n", result.Line, result.Context)
 		}
+	}
+
+	if len(results) == 0 {
+		fmt.Println("No issues found. Congrats!")
 	}
 
 	return nil

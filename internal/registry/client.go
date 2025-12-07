@@ -1,70 +1,13 @@
 package registry
 
 import (
+	"dockerguard/internal/dockerfile"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
-	"time"
-
-	"dockerguard/internal/dockerfile"
 )
-
-// Client handles communication with Docker registries
-type Client struct {
-	httpClient *http.Client
-	baseURL    string
-}
-
-// NewClient creates a new registry client
-func NewClient() *Client {
-	return &Client{
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-		baseURL: "https://registry-1.docker.io/v2",
-	}
-}
-
-// CheckBaseImage fetches the base image and converts it to a Dockerfile struct
-func (c *Client) CheckBaseImage(image string) (*dockerfile.Dockerfile, error) {
-
-	// Parse image name and tag from base image passed in from analyzer
-	name, tag, err := c.parseImage(image)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get anonymous token
-	token, err := c.getToken(name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get token: %w", err)
-	}
-
-	// Get Image Manifest to find Config Digest
-	manifest, err := c.GetManifest(name, tag, token)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get manifest: %w", err)
-	}
-
-	// Get image Config (history)
-	// Docker image config is a JSON blob that contains the history of the image, which has the Dockerfile instructions
-	config, err := c.GetImageConfig(name, manifest.Config.Digest, token)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get image config: %w", err)
-	}
-
-	// Convert history to dockerfile
-	var historyItems []dockerfile.HistoryItem
-	for _, item := range config.History {
-		historyItems = append(historyItems, dockerfile.HistoryItem{
-			CreatedBy: item.CreatedBy,
-		})
-	}
-
-	return dockerfile.FromHistory(historyItems), nil
-}
 
 // Manifest represents a Docker Image Manifest V2 or Manifest List
 type Manifest struct {
@@ -73,19 +16,60 @@ type Manifest struct {
 	Config struct {
 		Digest string `json:"digest"`
 	} `json:"config"`
-	// For Manifest List
-	Manifests []struct {
-		Digest   string `json:"digest"`
-		Platform struct {
-			Architecture string `json:"architecture"`
-			Os           string `json:"os"`
-		} `json:"platform"`
-	} `json:"manifests"`
+	// Handles manifest lists
+	Digest string `json:"digest"`
+}
+
+// GetBaseImage fetches the base image and converts it to a Dockerfile struct
+func GetBaseImage(image string) (*dockerfile.Dockerfile, error) {
+
+	//parse the image name and tag from base image passed in from analyzer
+	name, tag, err := parseImage(image)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get token to be able to fetch manifest
+	token, err := getToken(name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get docker manifest. The manifest is what contains the digest with the image history to assemble the base image commands
+	manifest, err := GetManifest(name, tag, token)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get image Config from the manifest digest
+	var imageConfig *ImageConfig
+	if manifest.Config.Digest != "" {
+		imageConfig, err = GetImageConfig(name, manifest.Config.Digest, token)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		imageConfig, err = GetImageConfig(name, manifest.Digest, token)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Convert history to dockerfile struct
+	var historyItems []dockerfile.HistoryItem
+	for _, item := range imageConfig.History {
+		historyItems = append(historyItems, dockerfile.HistoryItem{
+			CreatedBy: item.CreatedBy,
+		})
+	}
+
+	return dockerfile.FromHistory(historyItems), nil
+
 }
 
 // GetManifest fetches the image manifest, returns the manifest object
-func (c *Client) GetManifest(name, tag, token string) (*Manifest, error) {
-	url := fmt.Sprintf("%s/%s/manifests/%s", c.baseURL, name, tag)
+func GetManifest(name, tag, token string) (*Manifest, error) {
+	url := "https://registry-1.docker.io/v2/" + name + "/manifests/" + tag
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -97,7 +81,9 @@ func (c *Client) GetManifest(name, tag, token string) (*Manifest, error) {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	client := &http.Client{}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -107,17 +93,30 @@ func (c *Client) GetManifest(name, tag, token string) (*Manifest, error) {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("failed to get manifest: %d - %s", resp.StatusCode, string(body))
 	}
+	body, _ := io.ReadAll(resp.Body)
+	// fmt.Println("body: ", string(body))
+
+	// Some docker registry images have multiple manifests to handle different architectures
+	// If the response body is a manifest list, parse out the first one and put it into a manifest struct
+	// This is a simple if unelegant solution to just checking the base image static vulnerabilities
+	if strings.Contains(string(body), "manifests") {
+		var manifestList struct {
+			Manifests []Manifest `json:"manifests"`
+		}
+		err = json.Unmarshal(body, &manifestList)
+		if err != nil {
+			return nil, err
+		}
+
+		// Recursively call GetManifest with the first manifest
+		return GetManifest(name, manifestList.Manifests[0].Digest, token)
+	}
 
 	var manifest Manifest
 	// Decode the response body into a manifest object
-	if err := json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
+	err = json.Unmarshal(body, &manifest)
+	if err != nil {
 		return nil, err
-	}
-
-	// If it's a manifest list, just pick the first one
-	// Maybe not the best approach, but simpler and easier, and gets at the heart of the actual Security concerns
-	if len(manifest.Manifests) > 0 {
-		return c.GetManifest(name, manifest.Manifests[0].Digest, token)
 	}
 
 	return &manifest, nil
@@ -125,9 +124,7 @@ func (c *Client) GetManifest(name, tag, token string) (*Manifest, error) {
 
 // ImageConfig represents the image configuration JSON
 type ImageConfig struct {
-	Architecture string `json:"architecture"`
-	Os           string `json:"os"`
-	History      []struct {
+	History []struct {
 		Created    string `json:"created"`
 		CreatedBy  string `json:"created_by"`
 		EmptyLayer bool   `json:"empty_layer"`
@@ -135,10 +132,11 @@ type ImageConfig struct {
 }
 
 // GetImageConfig fetches the image configuration blob
-func (c *Client) GetImageConfig(name, digest, token string) (*ImageConfig, error) {
-
+func GetImageConfig(name, digest, token string) (*ImageConfig, error) {
 	// Format url and make request
-	url := fmt.Sprintf("%s/%s/blobs/%s", c.baseURL, name, digest)
+	url := "https://registry-1.docker.io/v2/" + name + "/blobs/" + digest
+	client := &http.Client{}
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -148,7 +146,7 @@ func (c *Client) GetImageConfig(name, digest, token string) (*ImageConfig, error
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -158,9 +156,14 @@ func (c *Client) GetImageConfig(name, digest, token string) (*ImageConfig, error
 		return nil, fmt.Errorf("failed to get config: %d", resp.StatusCode)
 	}
 
-	// Decode the response body into an image config object
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// We care about the history of the image, which contains the Dockerfile instructions
 	var config ImageConfig
-	if err := json.NewDecoder(resp.Body).Decode(&config); err != nil {
+	if err := json.Unmarshal(body, &config); err != nil {
 		return nil, err
 	}
 
@@ -168,7 +171,7 @@ func (c *Client) GetImageConfig(name, digest, token string) (*ImageConfig, error
 }
 
 // parses an image reference into name and tag
-func (c *Client) parseImage(image string) (name, tag string, err error) {
+func parseImage(image string) (name, tag string, err error) {
 	parts := strings.Split(image, ":")
 	imageName := parts[0]
 	tag = "latest" // default tag
@@ -185,29 +188,34 @@ func (c *Client) parseImage(image string) (name, tag string, err error) {
 }
 
 // getToken fetches an anonymous token for the given repository
-func (c *Client) getToken(name string) (string, error) {
-	url := fmt.Sprintf("https://auth.docker.io/token?service=registry.docker.io&scope=repository:%s:pull", name)
-	req, err := http.NewRequest("GET", url, nil)
+func getToken(name string) (string, error) {
+
+	client := &http.Client{}
+
+	// Need to get anonymous token to fetch image data
+	tokenUrl := "https://auth.docker.io/token?service=registry.docker.io&scope=repository:" + name + ":pull"
+	req, err := http.NewRequest("GET", tokenUrl, nil)
 	if err != nil {
 		return "", err
 	}
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to get token: %d", resp.StatusCode)
-	}
-
-	var tokenResp struct {
+	type tokenResp struct {
 		Token string `json:"token"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	var token tokenResp
+	err = json.Unmarshal(body, &token)
+	if err != nil {
 		return "", err
 	}
 
-	return tokenResp.Token, nil
+	return token.Token, nil
 }

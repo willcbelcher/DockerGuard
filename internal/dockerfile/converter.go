@@ -17,15 +17,15 @@ func FromHistory(history []HistoryItem) *Dockerfile {
 
 	for i, item := range history {
 		raw := item.CreatedBy
-		
+
 		// Clean up the command
 		// Docker history often looks like: /bin/sh -c #(nop) CMD ["/bin/bash"]
 		// or: /bin/sh -c apt-get update
-		
+
 		clean := raw
 		clean = strings.Replace(clean, "/bin/sh -c #(nop) ", "", 1)
 		clean = strings.Replace(clean, "/bin/sh -c ", "", 1)
-		
+
 		// Determine type (heuristic)
 		instType := "RUN"
 		if strings.HasPrefix(clean, "CMD") {

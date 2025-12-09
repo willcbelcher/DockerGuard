@@ -101,7 +101,7 @@ Analyze a Dockerfile:
 ### Options
 
 - `-f, --file`: Path to Dockerfile to analyze (default: "Dockerfile")
-- `-r, --rules`: Path to custom rules file (optional)
+- `-c, --config`: Path to configuration file (optional)
 - `-v, --verbose`: Enable verbose output
 
 ### Examples
@@ -115,6 +115,9 @@ Analyze a Dockerfile:
 
 # Enable verbose output
 ./dockerguard -v -f Dockerfile
+
+# Use a configuration file
+./dockerguard -f Dockerfile -c examples/dockerguard-config.yml
 
 # Analyze example Dockerfile
 ./dockerguard -f examples/Dockerfile.example
@@ -148,7 +151,6 @@ DockerGuard/
 │   ├── rules/            # Security rule engine
 │   │   ├── engine.go     # Rule engine and rule definitions
 │   │   └── helpers.go    # Helper functions for rule creation
-│   ├── secrets/          # Secret detection scanner (regex-based)
 │   └── types/            # Shared types (prevents import cycles)
 ├── examples/             # Example Dockerfiles for testing
 ├── sample_data/          # Sample Dockerfiles from real projects
@@ -165,7 +167,6 @@ DockerGuard/
 4. **Analysis Components**:
    - **Parser** (`internal/dockerfile/`): Converts Dockerfile text to structured data
    - **Rule Engine** (`internal/rules/`): Executes security rules
-   - **Secret Scanner** (`internal/secrets/`): Pattern-based secret detection
    - **Registry Client** (`internal/registry/`): Base image vulnerability checks (TODO)
 5. **Shared Types** (`internal/types/`): Common data structures
 
@@ -200,6 +201,11 @@ DockerGuard includes a comprehensive set of built-in security rules organized by
 - **DG002**: Secrets should not be hardcoded in ENV/ARG instructions
   - Detects potential secrets in environment variables and build arguments
   - Keywords: password, secret, key, token, api_key, credential, auth
+  - Checks
+    - **AWS Access Keys**: `AKIA[0-9A-Z]{16}` pattern
+    - **API Keys**: Generic patterns for `api_key`, `apikey` with values
+    - **Private Keys**: PEM format private keys (RSA, DSA, EC, OpenSSH)
+    - **Passwords**: Password patterns in environment variables
 
 #### High Severity
 - **DG001**: Container should not run as root user
@@ -228,14 +234,6 @@ DockerGuard includes a comprehensive set of built-in security rules organized by
   - Recommends adding healthcheck for better container orchestration
 - **DG012**: CMD/ENTRYPOINT should use exec form (JSON array)
   - Recommends exec form `["cmd", "arg"]` over shell form for better signal handling
-
-### Secret Detection
-
-The secret scanner (SECRET) uses regex patterns to detect:
-- **AWS Access Keys**: `AKIA[0-9A-Z]{16}` pattern
-- **API Keys**: Generic patterns for `api_key`, `apikey` with values
-- **Private Keys**: PEM format private keys (RSA, DSA, EC, OpenSSH)
-- **Passwords**: Password patterns in environment variables
 
 ### Extending Rules
 

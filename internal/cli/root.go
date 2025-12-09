@@ -30,11 +30,11 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 	configPath, _ := cmd.Flags().GetString("config")
 	verbose, _ := cmd.Flags().GetBool("verbose")
 
-	analyzer, err := analyzer.NewAnalyzer(verbose, configPath)
+	az, err := analyzer.NewAnalyzer(verbose, configPath)
 	if err != nil {
 		return err
 	}
-	results, err := analyzer.Analyze(filePath)
+	results, err := az.Analyze(filePath)
 	if err != nil {
 		return err
 	}

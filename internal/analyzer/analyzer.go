@@ -8,7 +8,6 @@ import (
 	"dockerguard/internal/dockerfile"
 	"dockerguard/internal/registry"
 	"dockerguard/internal/rules"
-	"dockerguard/internal/secrets"
 	"dockerguard/internal/types"
 )
 
@@ -16,7 +15,6 @@ import (
 type Analyzer struct {
 	verbose    bool
 	ruleEngine *rules.Engine
-	secretScan *secrets.Scanner
 }
 
 // NewAnalyzer creates a new analyzer instance
@@ -32,7 +30,6 @@ func NewAnalyzer(verbose bool, configPath string) (*Analyzer, error) {
 	return &Analyzer{
 		verbose:    verbose,
 		ruleEngine: engine,
-		secretScan: secrets.NewScanner(),
 	}, nil
 }
 
@@ -55,10 +52,6 @@ func (a *Analyzer) Analyze(filePath string) ([]types.Result, error) {
 	ruleResults := a.ruleEngine.Check(df)
 	results = append(results, ruleResults...)
 
-	// Check for secrets
-	secretResults := a.secretScan.Scan(df)
-	results = append(results, secretResults...)
-
 	// Check base image vulnerabilities
 	if df.BaseImage != "" {
 		baseDf, err := registry.GetBaseImage(df.BaseImage)
@@ -69,13 +62,6 @@ func (a *Analyzer) Analyze(filePath string) ([]types.Result, error) {
 			// Run rule-based checks on base image
 			baseRuleResults := a.ruleEngine.Check(baseDf)
 			for _, res := range baseRuleResults {
-				res.Message = fmt.Sprintf("[Base Image: %s] %s", df.BaseImage, res.Message)
-				results = append(results, res)
-			}
-
-			// Check for secrets in base image
-			baseSecretResults := a.secretScan.Scan(baseDf)
-			for _, res := range baseSecretResults {
 				res.Message = fmt.Sprintf("[Base Image: %s] %s", df.BaseImage, res.Message)
 				results = append(results, res)
 			}

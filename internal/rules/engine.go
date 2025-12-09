@@ -2,12 +2,42 @@ package rules
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"dockerguard/internal/config"
 	"dockerguard/internal/dockerfile"
 	"dockerguard/internal/types"
 )
+
+type secretPattern struct {
+	Name     string
+	Pattern  *regexp.Regexp
+	Severity string
+}
+
+var secretPatterns = []secretPattern{
+	{
+		Name:     "AWS Access Key",
+		Pattern:  regexp.MustCompile(`AKIA[0-9A-Z]{16}`),
+		Severity: "critical",
+	},
+	{
+		Name:     "API Key",
+		Pattern:  regexp.MustCompile(`(?i)(api[_-]?key|apikey)\s*[=:]\s*['"]?[a-zA-Z0-9]{20,}['"]?`),
+		Severity: "critical",
+	},
+	{
+		Name:     "Private Key",
+		Pattern:  regexp.MustCompile(`-----BEGIN\s+(RSA|DSA|EC|OPENSSH)\s+PRIVATE KEY-----`),
+		Severity: "critical",
+	},
+	{
+		Name:     "Password",
+		Pattern:  regexp.MustCompile(`(?i)(password|pwd|passwd)\s*[=:]\s*['"]?[^'\s"]+['"]?`),
+		Severity: "high",
+	},
+}
 
 // Engine manages and executes security rules
 type Engine struct {
@@ -44,10 +74,11 @@ func (e *Engine) Check(df *dockerfile.Dockerfile) []types.Result {
 			continue
 		}
 		ruleResults := rule.Check(df)
-		// Update severity if needed (though we updated the rule struct itself, the result creation uses hardcoded severity strings in check functions)
-		// So we need to override the severity in the results
-		for i := range ruleResults {
-			ruleResults[i].Severity = rule.Severity
+		// Override severity only when a rule-level severity is set (supports per-result severity like SECRET patterns)
+		if rule.Severity != "" {
+			for i := range ruleResults {
+				ruleResults[i].Severity = rule.Severity
+			}
 		}
 		results = append(results, ruleResults...)
 	}
@@ -92,6 +123,9 @@ func (e *Engine) registerDefaultRules() {
 
 	// Rule DG012: Check for CMD/ENTRYPOINT security
 	e.registerRule("DG012", "CMD/ENTRYPOINT should use exec form for better signal handling", "low", e.checkCmdForm)
+
+	// Rule SECRET: Pattern-based secret detection
+	e.registerRule("SECRET", "Secrets should not be hardcoded anywhere in the Dockerfile", "", e.checkSecrets)
 }
 
 // registerRule is a helper to register rules
@@ -359,6 +393,28 @@ func (e *Engine) checkCmdForm(df *dockerfile.Dockerfile) []types.Result {
 					inst.Line,
 					inst.Raw,
 				))
+			}
+		}
+	}
+
+	return results
+}
+
+// checkSecrets performs regex-based secret detection (was previously in secrets.Scanner)
+func (e *Engine) checkSecrets(df *dockerfile.Dockerfile) []types.Result {
+	var results []types.Result
+
+	for _, inst := range df.Instructions {
+		for _, pattern := range secretPatterns {
+			if pattern.Pattern.MatchString(inst.Raw) {
+				// Use pattern severity unless overridden by config in Check()
+				results = append(results, types.Result{
+					Severity: pattern.Severity,
+					RuleID:   "SECRET",
+					Message:  fmt.Sprintf("Potential %s detected", pattern.Name),
+					Line:     inst.Line,
+					Context:  inst.Raw,
+				})
 			}
 		}
 	}

@@ -14,13 +14,13 @@ This project is for CS2630, Systems Security at Harvard University.
   - Image tagging best practices
   - File operations (COPY vs ADD)
   - Container configuration
-- **Extensible Architecture**: Easy to add custom rules using helper functions
 - **Secret Detection**: Pattern-based detection of:
   - AWS access keys
   - API keys
   - Private keys (PEM format)
   - Passwords in environment variables
-- **Base Image Analysis**: Framework for checking base images for known vulnerabilities (via Docker Registry API - TODO)
+- **Base Image Analysis**: Reconstructs base images from Dockerfile and performs the same analysis
+- **User Configuration**: Configurable rules and severity levels
 - **CI/CD Ready**: Command-line tool that can be integrated into build pipelines
 
 ## Prerequisites
@@ -31,25 +31,29 @@ This project is for CS2630, Systems Security at Harvard University.
 ## Setup
 
 1. **Clone the repository**:
+
    ```bash
    git clone git@github.com:willcbelcher/DockerGuard.git
    cd DockerGuard
    ```
 
 2. **Install dependencies**:
+
    ```bash
    go mod download
    go mod tidy
    ```
-   
+
    This will download all dependencies and generate the `go.sum` file.
 
 3. **Build the project**:
+
    ```bash
    go build -o dockerguard ./cmd/dockerguard
    ```
 
    Or install it directly:
+
    ```bash
    go install ./cmd/dockerguard
    ```
@@ -64,21 +68,25 @@ This project is for CS2630, Systems Security at Harvard University.
 If the `dockerguard` binary is not created after running `go build`:
 
 1. **Check for build errors**: Make sure you're running the command from the project root directory:
+
    ```bash
    cd /path/to/DockerGuard
    go build -o dockerguard ./cmd/dockerguard
    ```
 
 2. **Check for compilation errors**: If there are any errors, they will be displayed. Common issues:
+
    - Missing dependencies: Run `go mod tidy` again
    - Import errors: Make sure all files are saved
 
 3. **Verify the binary was created**:
+
    ```bash
    ls -la dockerguard
    ```
 
 4. **Try building with verbose output**:
+
    ```bash
    go build -v -o dockerguard ./cmd/dockerguard
    ```
@@ -94,6 +102,7 @@ If the `dockerguard` binary is not created after running `go build`:
 ### Basic Usage
 
 Analyze a Dockerfile:
+
 ```bash
 ./dockerguard -f Dockerfile
 ```
@@ -101,7 +110,7 @@ Analyze a Dockerfile:
 ### Options
 
 - `-f, --file`: Path to Dockerfile to analyze (default: "Dockerfile")
-- `-r, --rules`: Path to custom rules file (optional)
+- `-c, --config`: Path to config file (optional)
 - `-v, --verbose`: Enable verbose output
 
 ### Examples
@@ -143,7 +152,8 @@ DockerGuard/
 ├── internal/
 │   ├── analyzer/         # Core analysis engine (orchestrates all checks)
 │   ├── cli/              # CLI command definitions (Cobra-based)
-│   ├── dockerfile/       # Dockerfile parser (converts text to structured format)
+│   ├── dockerfile/       # Dockerfile parser (converts text to structured format, reconstructs base images)
+│   ├── config/           # Configuration file parsing
 │   ├── registry/         # Docker Registry API client (base image vulnerability checks)
 │   ├── rules/            # Security rule engine
 │   │   ├── engine.go     # Rule engine and rule definitions
@@ -164,31 +174,11 @@ DockerGuard/
 3. **Orchestration Layer** (`internal/analyzer/`): Coordinates all analysis components
 4. **Analysis Components**:
    - **Parser** (`internal/dockerfile/`): Converts Dockerfile text to structured data
-   - **Rule Engine** (`internal/rules/`): Executes security rules
+   - **Rule Checker** (`internal/rules/`): Executes security rules
    - **Secret Scanner** (`internal/secrets/`): Pattern-based secret detection
-   - **Registry Client** (`internal/registry/`): Base image vulnerability checks (TODO)
+   - **Registry Client** (`internal/registry/`): Base image vulnerability checks
+   - **Configuration Parser** (`internal/config/`): Parses configuration file
 5. **Shared Types** (`internal/types/`): Common data structures
-
-## Development
-
-### Running Tests
-
-```bash
-go test ./...
-```
-
-### Building for Different Platforms
-
-```bash
-# Linux
-GOOS=linux GOARCH=amd64 go build -o dockerguard-linux ./cmd/dockerguard
-
-# macOS
-GOOS=darwin GOARCH=amd64 go build -o dockerguard-macos ./cmd/dockerguard
-
-# Windows
-GOOS=windows GOARCH=amd64 go build -o dockerguard.exe ./cmd/dockerguard
-```
 
 ## Security Rules
 
@@ -197,17 +187,20 @@ DockerGuard includes a comprehensive set of built-in security rules organized by
 ### Rule Categories
 
 #### Critical Severity
+
 - **DG002**: Secrets should not be hardcoded in ENV/ARG instructions
   - Detects potential secrets in environment variables and build arguments
   - Keywords: password, secret, key, token, api_key, credential, auth
 
 #### High Severity
+
 - **DG001**: Container should not run as root user
   - Checks if container runs as root (UID 0) or if no USER instruction is present
 - **DG004**: RUN instructions should not contain privilege escalation
   - Detects use of `sudo` or `su` commands in RUN instructions
 
 #### Medium Severity
+
 - **DG003**: Base image should not use 'latest' tag
   - Warns when base image uses `:latest` tag or no tag (reduces reproducibility)
 - **DG005**: Package managers should use security best practices
@@ -220,6 +213,7 @@ DockerGuard includes a comprehensive set of built-in security rules organized by
   - Warns when WORKDIR is set to `/` or `/root`
 
 #### Low Severity
+
 - **DG006**: apt-get install should be combined with apt-get update
   - Best practice reminder for package manager usage
 - **DG009**: EXPOSE should be documented and necessary
@@ -232,6 +226,7 @@ DockerGuard includes a comprehensive set of built-in security rules organized by
 ### Secret Detection
 
 The secret scanner (SECRET) uses regex patterns to detect:
+
 - **AWS Access Keys**: `AKIA[0-9A-Z]{16}` pattern
 - **API Keys**: Generic patterns for `api_key`, `apikey` with values
 - **Private Keys**: PEM format private keys (RSA, DSA, EC, OpenSSH)
@@ -242,6 +237,7 @@ The secret scanner (SECRET) uses regex patterns to detect:
 The rule engine is designed for easy extension. To add a new rule:
 
 1. **Create a check function** in `internal/rules/engine.go`:
+
    ```go
    func (e *Engine) checkYourNewRule(df *dockerfile.Dockerfile) []types.Result {
        var results []types.Result
@@ -251,6 +247,7 @@ The rule engine is designed for easy extension. To add a new rule:
    ```
 
 2. **Register the rule** in `registerDefaultRules()`:
+
    ```go
    e.registerRule("DG013", "Your rule description", "severity", e.checkYourNewRule)
    ```
@@ -263,10 +260,11 @@ The rule engine is designed for easy extension. To add a new rule:
    - `createResult()` - Create standardized results
 
 Example rule implementation:
+
 ```go
 func (e *Engine) checkExampleRule(df *dockerfile.Dockerfile) []types.Result {
     var results []types.Result
-    
+
     for _, inst := range df.Instructions {
         if inst.Type == "RUN" && strings.Contains(inst.Args, "insecure-pattern") {
             results = append(results, createResult(
@@ -278,7 +276,7 @@ func (e *Engine) checkExampleRule(df *dockerfile.Dockerfile) []types.Result {
             ))
         }
     }
-    
+
     return results
 }
 ```
@@ -287,21 +285,21 @@ func (e *Engine) checkExampleRule(df *dockerfile.Dockerfile) []types.Result {
 
 ### Rule IDs
 
-| ID | Severity | Description |
-|----|----------|-------------|
-| DG001 | High | Container runs as root user |
-| DG002 | Critical | Hardcoded secrets in ENV/ARG |
-| DG003 | Medium | Base image uses 'latest' tag |
-| DG004 | High | Privilege escalation in RUN |
-| DG005 | Medium | Insecure package manager usage |
-| DG006 | Low | apt-get update best practice |
-| DG007 | Medium | Unverified downloads |
-| DG008 | Medium | ADD vs COPY usage |
-| DG009 | Low | EXPOSE port documentation |
-| DG010 | Low | Missing HEALTHCHECK |
-| DG011 | Medium | WORKDIR set to root |
-| DG012 | Low | CMD/ENTRYPOINT form |
-| SECRET | Critical/High | Secret pattern detected |
+| ID     | Severity      | Description                    |
+| ------ | ------------- | ------------------------------ |
+| DG001  | High          | Container runs as root user    |
+| DG002  | Critical      | Hardcoded secrets in ENV/ARG   |
+| DG003  | Medium        | Base image uses 'latest' tag   |
+| DG004  | High          | Privilege escalation in RUN    |
+| DG005  | Medium        | Insecure package manager usage |
+| DG006  | Low           | apt-get update best practice   |
+| DG007  | Medium        | Unverified downloads           |
+| DG008  | Medium        | ADD vs COPY usage              |
+| DG009  | Low           | EXPOSE port documentation      |
+| DG010  | Low           | Missing HEALTHCHECK            |
+| DG011  | Medium        | WORKDIR set to root            |
+| DG012  | Low           | CMD/ENTRYPOINT form            |
+| SECRET | Critical/High | Secret pattern detected        |
 
 ### Helper Functions Reference
 

@@ -126,15 +126,15 @@ Analyze a Dockerfile:
 ### Example Output
 
 ```
-[high] DG001: No USER instruction found - container will run as root
-[critical] DG002: Potential secret found in ENV instruction
+[high] ROOT_USER: No USER instruction found - container will run as root
+[critical] SECRET_ENV_ARG: Potential secret found in ENV instruction
   Line 5: ENV API_KEY=sk_live_1234567890abcdef
-[medium] DG003: Base image uses 'latest' tag or no tag specified
+[medium] BASE_IMAGE_LATEST: Base image uses 'latest' tag or no tag specified
 [critical] SECRET: Potential AWS Access Key detected
   Line 5: ENV API_KEY=sk_live_1234567890abcdef
-[medium] DG008: Use COPY instead of ADD for local files
+[medium] ADD_INSTEAD_OF_COPY: Use COPY instead of ADD for local files
   Line 8: ADD app.py /app/
-[low] DG010: Consider adding HEALTHCHECK instruction for better container orchestration
+[low] MISSING_HEALTHCHECK: Consider adding HEALTHCHECK instruction for better container orchestration
 ```
 
 ## Project Structure
@@ -198,7 +198,7 @@ DockerGuard includes a comprehensive set of built-in security rules organized by
 ### Rule Categories
 
 #### Critical Severity
-- **DG002**: Secrets should not be hardcoded in ENV/ARG instructions
+- **SECRET_ENV_ARG**: Secrets should not be hardcoded in ENV/ARG instructions
   - Detects potential secrets in environment variables and build arguments
   - Keywords: password, secret, key, token, api_key, credential, auth
   - Checks
@@ -207,32 +207,32 @@ DockerGuard includes a comprehensive set of built-in security rules organized by
     - **Private Keys**: PEM format private keys (RSA, DSA, EC, OpenSSH)
     - **Passwords**: Password patterns in environment variables
 
-#### High Severity
-- **DG001**: Container should not run as root user
+- #### High Severity
+- **ROOT_USER**: Container should not run as root user
   - Checks if container runs as root (UID 0) or if no USER instruction is present
-- **DG004**: RUN instructions should not contain privilege escalation
+- **RUN_PRIV_ESC**: RUN instructions should not contain privilege escalation
   - Detects use of `sudo` or `su` commands in RUN instructions
 
-#### Medium Severity
-- **DG003**: Base image should not use 'latest' tag
+- #### Medium Severity
+- **BASE_IMAGE_LATEST**: Base image should not use 'latest' tag
   - Warns when base image uses `:latest` tag or no tag (reduces reproducibility)
-- **DG005**: Package managers should use security best practices
+- **PKG_MGR_BEST_PRACTICE**: Package managers should use security best practices
   - Checks for `apt-get install` without `--no-install-recommends` flag
-- **DG007**: Downloads should be verified with checksums or signatures
+- **UNVERIFIED_DOWNLOAD**: Downloads should be verified with checksums or signatures
   - Warns when `curl` or `wget` are used without verification (checksum, GPG, etc.)
-- **DG008**: Use COPY instead of ADD for local files
+- **ADD_INSTEAD_OF_COPY**: Use COPY instead of ADD for local files
   - Recommends COPY over ADD unless ADD's special features (URLs, tar extraction) are needed
-- **DG011**: WORKDIR should not be set to root directory
+- **WORKDIR_ROOT**: WORKDIR should not be set to root directory
   - Warns when WORKDIR is set to `/` or `/root`
 
-#### Low Severity
-- **DG006**: apt-get install should be combined with apt-get update
+- #### Low Severity
+- **APT_INSTALL_NO_UPDATE**: apt-get install should be combined with apt-get update
   - Best practice reminder for package manager usage
-- **DG009**: EXPOSE should be documented and necessary
+- **EXPOSE_DOCUMENTATION**: EXPOSE should be documented and necessary
   - Informational check for exposed ports
-- **DG010**: Consider adding HEALTHCHECK instruction
+- **MISSING_HEALTHCHECK**: Consider adding HEALTHCHECK instruction
   - Recommends adding healthcheck for better container orchestration
-- **DG012**: CMD/ENTRYPOINT should use exec form (JSON array)
+- **CMD_NOT_EXEC_FORM**: CMD/ENTRYPOINT should use exec form (JSON array)
   - Recommends exec form `["cmd", "arg"]` over shell form for better signal handling
 
 ### Extending Rules
@@ -250,7 +250,7 @@ The rule engine is designed for easy extension. To add a new rule:
 
 2. **Register the rule** in `registerDefaultRules()`:
    ```go
-   e.registerRule("DG013", "Your rule description", "severity", e.checkYourNewRule)
+   e.registerRule("CUSTOM_RULE_ID", "Your rule description", "severity", e.checkYourNewRule)
    ```
 
 3. **Use helper functions** from `helpers.go`:
@@ -268,7 +268,7 @@ func (e *Engine) checkExampleRule(df *dockerfile.Dockerfile) []types.Result {
     for _, inst := range df.Instructions {
         if inst.Type == "RUN" && strings.Contains(inst.Args, "insecure-pattern") {
             results = append(results, createResult(
-                "DG013",
+                "CUSTOM_RULE_ID",
                 "high",
                 "Found insecure pattern in RUN instruction",
                 inst.Line,
@@ -287,18 +287,18 @@ func (e *Engine) checkExampleRule(df *dockerfile.Dockerfile) []types.Result {
 
 | ID | Severity | Description |
 |----|----------|-------------|
-| DG001 | High | Container runs as root user |
-| DG002 | Critical | Hardcoded secrets in ENV/ARG |
-| DG003 | Medium | Base image uses 'latest' tag |
-| DG004 | High | Privilege escalation in RUN |
-| DG005 | Medium | Insecure package manager usage |
-| DG006 | Low | apt-get update best practice |
-| DG007 | Medium | Unverified downloads |
-| DG008 | Medium | ADD vs COPY usage |
-| DG009 | Low | EXPOSE port documentation |
-| DG010 | Low | Missing HEALTHCHECK |
-| DG011 | Medium | WORKDIR set to root |
-| DG012 | Low | CMD/ENTRYPOINT form |
+| ROOT_USER | High | Container runs as root user |
+| SECRET_ENV_ARG | Critical | Hardcoded secrets in ENV/ARG |
+| BASE_IMAGE_LATEST | Medium | Base image uses 'latest' tag |
+| RUN_PRIV_ESC | High | Privilege escalation in RUN |
+| PKG_MGR_BEST_PRACTICE | Medium | Insecure package manager usage |
+| APT_INSTALL_NO_UPDATE | Low | apt-get update best practice |
+| UNVERIFIED_DOWNLOAD | Medium | Unverified downloads |
+| ADD_INSTEAD_OF_COPY | Medium | ADD vs COPY usage |
+| EXPOSE_DOCUMENTATION | Low | EXPOSE port documentation |
+| MISSING_HEALTHCHECK | Low | Missing HEALTHCHECK |
+| WORKDIR_ROOT | Medium | WORKDIR set to root |
+| CMD_NOT_EXEC_FORM | Low | CMD/ENTRYPOINT form |
 | SECRET | Critical/High | Secret pattern detected |
 
 ### Helper Functions Reference

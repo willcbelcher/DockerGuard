@@ -1,12 +1,12 @@
 # Example Dockerfile with various security issues for testing
 FROM ubuntu:latest
 
-# Issue: Using 'latest' tag (DG003)
+# Issue: Using 'latest' tag (BASE_IMAGE_LATEST)
 
-# Issue: Running as root (DG001)
+# Issue: Running as root (ROOT_USER)
 RUN apt-get update && apt-get install -y curl
 
-# Issue: Hardcoded secret (DG002, SECRET)
+# Issue: Hardcoded secret (SECRET_ENV_ARG, SECRET)
 ENV API_KEY=sk_live_1234567890abcdef
 ENV PASSWORD=mysecretpassword123
 

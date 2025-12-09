@@ -1,5 +1,5 @@
 rules:
-  DG001:
+  ROOT_USER:
     disabled: true
-  DG002:
+  SECRET_ENV_ARG:
     severity: "low"

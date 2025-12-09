@@ -89,7 +89,7 @@ func checkRunInstruction(inst dockerfile.Instruction) []types.Result {
 
 	if containsPattern(args, privilegeEscalationPatterns) {
 		results = append(results, createResult(
-			"DG004",
+			"RUN_PRIV_ESC",
 			"high",
 			"RUN instruction contains privilege escalation (sudo/su)",
 			inst.Line,
@@ -100,7 +100,7 @@ func checkRunInstruction(inst dockerfile.Instruction) []types.Result {
 	// Check for insecure package manager usage
 	if strings.Contains(args, "apt-get install") && !strings.Contains(args, "--no-install-recommends") {
 		results = append(results, createResult(
-			"DG005",
+			"PKG_MGR_BEST_PRACTICE",
 			"medium",
 			"apt-get install without --no-install-recommends (increases image size and attack surface)",
 			inst.Line,
@@ -112,7 +112,7 @@ func checkRunInstruction(inst dockerfile.Instruction) []types.Result {
 	if strings.Contains(args, "apt-get install") && !strings.Contains(args, "apt-get update") {
 		// Check if update was done in a previous RUN
 		results = append(results, createResult(
-			"DG006",
+			"APT_INSTALL_NO_UPDATE",
 			"low",
 			"apt-get install should be preceded by apt-get update in the same RUN instruction",
 			inst.Line,
@@ -126,7 +126,7 @@ func checkRunInstruction(inst dockerfile.Instruction) []types.Result {
 		!strings.Contains(args, "gpg") &&
 		!strings.Contains(args, "checksum") {
 		results = append(results, createResult(
-			"DG007",
+			"UNVERIFIED_DOWNLOAD",
 			"medium",
 			"Downloading files with curl/wget without verification (checksum or signature)",
 			inst.Line,

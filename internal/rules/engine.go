@@ -88,41 +88,41 @@ func (e *Engine) Check(df *dockerfile.Dockerfile) []types.Result {
 
 // registerDefaultRules registers built-in security rules
 func (e *Engine) registerDefaultRules() {
-	// Rule DG001: Check if running as root
-	e.registerRule("DG001", "Container should not run as root user", "high", e.checkRootUser)
+	// Rule ROOT_USER: Check if running as root
+	e.registerRule("ROOT_USER", "Container should not run as root user", "high", e.checkRootUser)
 
-	// Rule DG002: Check for exposed secrets in ENV
-	e.registerRule("DG002", "Secrets should not be hardcoded in ENV instructions", "critical", e.checkHardcodedSecrets)
+	// Rule SECRET_ENV_ARG: Check for exposed secrets in ENV/ARG
+	e.registerRule("SECRET_ENV_ARG", "Secrets should not be hardcoded in ENV/ARG instructions", "critical", e.checkHardcodedSecrets)
 
-	// Rule DG003: Check for latest tag
-	e.registerRule("DG003", "Base image should not use 'latest' tag", "medium", e.checkLatestTag)
+	// Rule BASE_IMAGE_LATEST: Check for latest tag
+	e.registerRule("BASE_IMAGE_LATEST", "Base image should not use 'latest' tag", "medium", e.checkLatestTag)
 
-	// Rule DG004: Check for privilege escalation in RUN
-	e.registerRule("DG004", "RUN instructions should not contain privilege escalation", "high", e.checkPrivilegeEscalation)
+	// Rule RUN_PRIV_ESC: Check for privilege escalation in RUN
+	e.registerRule("RUN_PRIV_ESC", "RUN instructions should not contain privilege escalation", "high", e.checkPrivilegeEscalation)
 
-	// Rule DG005: Check for insecure package manager usage
-	e.registerRule("DG005", "Package managers should use security best practices", "medium", e.checkPackageManager)
+	// Rule PKG_MGR_BEST_PRACTICE: Check for insecure package manager usage
+	e.registerRule("PKG_MGR_BEST_PRACTICE", "Package managers should use security best practices", "medium", e.checkPackageManager)
 
-	// Rule DG006: Check apt-get update usage
-	e.registerRule("DG006", "apt-get install should be combined with apt-get update", "low", e.checkAptGetUpdate)
+	// Rule APT_INSTALL_NO_UPDATE: Check apt-get update usage
+	e.registerRule("APT_INSTALL_NO_UPDATE", "apt-get install should be combined with apt-get update", "low", e.checkAptGetUpdate)
 
-	// Rule DG007: Check for unverified downloads
-	e.registerRule("DG007", "Downloads should be verified with checksums or signatures", "medium", e.checkUnverifiedDownloads)
+	// Rule UNVERIFIED_DOWNLOAD: Check for unverified downloads
+	e.registerRule("UNVERIFIED_DOWNLOAD", "Downloads should be verified with checksums or signatures", "medium", e.checkUnverifiedDownloads)
 
-	// Rule DG008: Check for ADD vs COPY
-	e.registerRule("DG008", "Use COPY instead of ADD unless you need ADD's special features", "medium", e.checkAddVsCopy)
+	// Rule ADD_INSTEAD_OF_COPY: Check for ADD vs COPY
+	e.registerRule("ADD_INSTEAD_OF_COPY", "Use COPY instead of ADD unless you need ADD's special features", "medium", e.checkAddVsCopy)
 
-	// Rule DG009: Check for exposed ports
-	e.registerRule("DG009", "EXPOSE should be documented and necessary", "low", e.checkExposedPorts)
+	// Rule EXPOSE_DOCUMENTATION: Check for exposed ports
+	e.registerRule("EXPOSE_DOCUMENTATION", "EXPOSE should be documented and necessary", "low", e.checkExposedPorts)
 
-	// Rule DG010: Check for healthcheck
-	e.registerRule("DG010", "Consider adding HEALTHCHECK instruction", "low", e.checkHealthcheck)
+	// Rule MISSING_HEALTHCHECK: Check for healthcheck
+	e.registerRule("MISSING_HEALTHCHECK", "Consider adding HEALTHCHECK instruction", "low", e.checkHealthcheck)
 
-	// Rule DG011: Check for WORKDIR in root
-	e.registerRule("DG011", "WORKDIR should not be set to root directory", "medium", e.checkWorkdirRoot)
+	// Rule WORKDIR_ROOT: Check for WORKDIR in root
+	e.registerRule("WORKDIR_ROOT", "WORKDIR should not be set to root directory", "medium", e.checkWorkdirRoot)
 
-	// Rule DG012: Check for CMD/ENTRYPOINT security
-	e.registerRule("DG012", "CMD/ENTRYPOINT should use exec form for better signal handling", "low", e.checkCmdForm)
+	// Rule CMD_NOT_EXEC_FORM: Check for CMD/ENTRYPOINT security
+	e.registerRule("CMD_NOT_EXEC_FORM", "CMD/ENTRYPOINT should use exec form for better signal handling", "low", e.checkCmdForm)
 
 	// Rule SECRET: Pattern-based secret detection
 	e.registerRule("SECRET", "Secrets should not be hardcoded anywhere in the Dockerfile", "", e.checkSecrets)
@@ -150,7 +150,7 @@ func (e *Engine) checkRootUser(df *dockerfile.Dockerfile) []types.Result {
 		}
 
 		results = append(results, createResult(
-			"DG001",
+			"ROOT_USER",
 			"high",
 			message,
 			lastUserLine,
@@ -182,7 +182,7 @@ func (e *Engine) checkHardcodedSecrets(df *dockerfile.Dockerfile) []types.Result
 			for _, keyword := range secretKeywords {
 				if strings.Contains(lowerArgs, keyword) {
 					results = append(results, createResult(
-						"DG002",
+						"SECRET_ENV_ARG",
 						"critical",
 						fmt.Sprintf("Potential secret found in %s instruction", inst.Type),
 						inst.Line,
@@ -207,7 +207,7 @@ func (e *Engine) checkLatestTag(df *dockerfile.Dockerfile) []types.Result {
 
 	if strings.HasSuffix(df.BaseImage, ":latest") || (!strings.Contains(df.BaseImage, ":") && !strings.Contains(df.BaseImage, "@")) {
 		results = append(results, createResult(
-			"DG003",
+			"BASE_IMAGE_LATEST",
 			"medium",
 			"Base image uses 'latest' tag or no tag specified (use specific version tags for reproducibility)",
 			0,
@@ -227,7 +227,7 @@ func (e *Engine) checkPrivilegeEscalation(df *dockerfile.Dockerfile) []types.Res
 			runResults := checkRunInstruction(inst)
 			// Filter for privilege escalation only
 			for _, r := range runResults {
-				if r.RuleID == "DG004" {
+				if r.RuleID == "RUN_PRIV_ESC" {
 					results = append(results, r)
 				}
 			}
@@ -246,7 +246,7 @@ func (e *Engine) checkPackageManager(df *dockerfile.Dockerfile) []types.Result {
 			runResults := checkRunInstruction(inst)
 			// Filter for package manager issues only
 			for _, r := range runResults {
-				if r.RuleID == "DG005" {
+				if r.RuleID == "PKG_MGR_BEST_PRACTICE" {
 					results = append(results, r)
 				}
 			}
@@ -265,7 +265,7 @@ func (e *Engine) checkAptGetUpdate(df *dockerfile.Dockerfile) []types.Result {
 			runResults := checkRunInstruction(inst)
 			// Filter for apt-get update issues only
 			for _, r := range runResults {
-				if r.RuleID == "DG006" {
+				if r.RuleID == "APT_INSTALL_NO_UPDATE" {
 					results = append(results, r)
 				}
 			}
@@ -284,7 +284,7 @@ func (e *Engine) checkUnverifiedDownloads(df *dockerfile.Dockerfile) []types.Res
 			runResults := checkRunInstruction(inst)
 			// Filter for download verification issues only
 			for _, r := range runResults {
-				if r.RuleID == "DG007" {
+				if r.RuleID == "UNVERIFIED_DOWNLOAD" {
 					results = append(results, r)
 				}
 			}
@@ -309,7 +309,7 @@ func (e *Engine) checkAddVsCopy(df *dockerfile.Dockerfile) []types.Result {
 
 			if !isURL && !isTarExtraction {
 				results = append(results, createResult(
-					"DG008",
+					"ADD_INSTEAD_OF_COPY",
 					"medium",
 					"Use COPY instead of ADD for local files (ADD has additional features that may be unnecessary)",
 					inst.Line,
@@ -343,7 +343,7 @@ func (e *Engine) checkHealthcheck(df *dockerfile.Dockerfile) []types.Result {
 
 	if !hasInstruction(df, "HEALTHCHECK") {
 		results = append(results, createResult(
-			"DG010",
+			"MISSING_HEALTHCHECK",
 			"low",
 			"Consider adding HEALTHCHECK instruction for better container orchestration",
 			0,
@@ -363,7 +363,7 @@ func (e *Engine) checkWorkdirRoot(df *dockerfile.Dockerfile) []types.Result {
 			workdir := strings.TrimSpace(inst.Args)
 			if workdir == "/" || workdir == "/root" {
 				results = append(results, createResult(
-					"DG011",
+					"WORKDIR_ROOT",
 					"medium",
 					"WORKDIR should not be set to root directory (use a non-root directory)",
 					inst.Line,
@@ -387,7 +387,7 @@ func (e *Engine) checkCmdForm(df *dockerfile.Dockerfile) []types.Result {
 			args := strings.TrimSpace(inst.Args)
 			if !strings.HasPrefix(args, "[") {
 				results = append(results, createResult(
-					"DG012",
+					"CMD_NOT_EXEC_FORM",
 					"low",
 					fmt.Sprintf("%s should use exec form (JSON array) for better signal handling", inst.Type),
 					inst.Line,

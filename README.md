@@ -14,13 +14,13 @@ This project is for CS2630, Systems Security at Harvard University.
   - Image tagging best practices
   - File operations (COPY vs ADD)
   - Container configuration
-- **Extensible Architecture**: Easy to add custom rules using helper functions
 - **Secret Detection**: Pattern-based detection of:
   - AWS access keys
   - API keys
   - Private keys (PEM format)
   - Passwords in environment variables
-- **Base Image Analysis**: Framework for checking base images for known vulnerabilities (via Docker Registry API - TODO)
+- **Base Image Analysis**: Reconstructs base images from Dockerfile and performs the same analysis
+- **User Configuration**: Configurable rules and severity levels
 - **CI/CD Ready**: Command-line tool that can be integrated into build pipelines
 
 ## Prerequisites
@@ -31,25 +31,29 @@ This project is for CS2630, Systems Security at Harvard University.
 ## Setup
 
 1. **Clone the repository**:
+
    ```bash
    git clone git@github.com:willcbelcher/DockerGuard.git
    cd DockerGuard
    ```
 
 2. **Install dependencies**:
+
    ```bash
    go mod download
    go mod tidy
    ```
-   
+
    This will download all dependencies and generate the `go.sum` file.
 
 3. **Build the project**:
+
    ```bash
    go build -o dockerguard ./cmd/dockerguard
    ```
 
    Or install it directly:
+
    ```bash
    go install ./cmd/dockerguard
    ```
@@ -64,21 +68,25 @@ This project is for CS2630, Systems Security at Harvard University.
 If the `dockerguard` binary is not created after running `go build`:
 
 1. **Check for build errors**: Make sure you're running the command from the project root directory:
+
    ```bash
    cd /path/to/DockerGuard
    go build -o dockerguard ./cmd/dockerguard
    ```
 
 2. **Check for compilation errors**: If there are any errors, they will be displayed. Common issues:
+
    - Missing dependencies: Run `go mod tidy` again
    - Import errors: Make sure all files are saved
 
 3. **Verify the binary was created**:
+
    ```bash
    ls -la dockerguard
    ```
 
 4. **Try building with verbose output**:
+
    ```bash
    go build -v -o dockerguard ./cmd/dockerguard
    ```
@@ -94,6 +102,7 @@ If the `dockerguard` binary is not created after running `go build`:
 ### Basic Usage
 
 Analyze a Dockerfile:
+
 ```bash
 ./dockerguard -f Dockerfile
 ```
@@ -101,7 +110,7 @@ Analyze a Dockerfile:
 ### Options
 
 - `-f, --file`: Path to Dockerfile to analyze (default: "Dockerfile")
-- `-c, --config`: Path to configuration file (optional)
+- `-c, --config`: Path to config file (optional)
 - `-v, --verbose`: Enable verbose output
 
 ### Examples
@@ -146,7 +155,8 @@ DockerGuard/
 ├── internal/
 │   ├── analyzer/         # Core analysis engine (orchestrates all checks)
 │   ├── cli/              # CLI command definitions (Cobra-based)
-│   ├── dockerfile/       # Dockerfile parser (converts text to structured format)
+│   ├── dockerfile/       # Dockerfile parser (converts text to structured format, reconstructs base images)
+│   ├── config/           # Configuration file parsing
 │   ├── registry/         # Docker Registry API client (base image vulnerability checks)
 │   ├── rules/            # Security rule engine
 │   │   ├── engine.go     # Rule engine and rule definitions
@@ -166,30 +176,10 @@ DockerGuard/
 3. **Orchestration Layer** (`internal/analyzer/`): Coordinates all analysis components
 4. **Analysis Components**:
    - **Parser** (`internal/dockerfile/`): Converts Dockerfile text to structured data
-   - **Rule Engine** (`internal/rules/`): Executes security rules
-   - **Registry Client** (`internal/registry/`): Base image vulnerability checks (TODO)
+   - **Rule Checker** (`internal/rules/`): Executes security rules
+   - **Registry Client** (`internal/registry/`): Base image vulnerability checks
+   - **Configuration Parser** (`internal/config/`): Parses configuration file
 5. **Shared Types** (`internal/types/`): Common data structures
-
-## Development
-
-### Running Tests
-
-```bash
-go test ./...
-```
-
-### Building for Different Platforms
-
-```bash
-# Linux
-GOOS=linux GOARCH=amd64 go build -o dockerguard-linux ./cmd/dockerguard
-
-# macOS
-GOOS=darwin GOARCH=amd64 go build -o dockerguard-macos ./cmd/dockerguard
-
-# Windows
-GOOS=windows GOARCH=amd64 go build -o dockerguard.exe ./cmd/dockerguard
-```
 
 ## Security Rules
 
@@ -240,6 +230,7 @@ DockerGuard includes a comprehensive set of built-in security rules organized by
 The rule engine is designed for easy extension. To add a new rule:
 
 1. **Create a check function** in `internal/rules/engine.go`:
+
    ```go
    func (e *Engine) checkYourNewRule(df *dockerfile.Dockerfile) []types.Result {
        var results []types.Result
@@ -249,6 +240,7 @@ The rule engine is designed for easy extension. To add a new rule:
    ```
 
 2. **Register the rule** in `registerDefaultRules()`:
+
    ```go
    e.registerRule("CUSTOM_RULE_ID", "Your rule description", "severity", e.checkYourNewRule)
    ```
@@ -261,10 +253,11 @@ The rule engine is designed for easy extension. To add a new rule:
    - `createResult()` - Create standardized results
 
 Example rule implementation:
+
 ```go
 func (e *Engine) checkExampleRule(df *dockerfile.Dockerfile) []types.Result {
     var results []types.Result
-    
+
     for _, inst := range df.Instructions {
         if inst.Type == "RUN" && strings.Contains(inst.Args, "insecure-pattern") {
             results = append(results, createResult(
@@ -276,7 +269,7 @@ func (e *Engine) checkExampleRule(df *dockerfile.Dockerfile) []types.Result {
             ))
         }
     }
-    
+
     return results
 }
 ```

@@ -47,7 +47,8 @@ def analyze_file(path: Path, totals: dict[str, int]) -> None:
         sys.stderr.write(f"{path.name}: {proc.stderr}\n")
         return
     for rule, count in parse_output(proc.stdout).items():
-        totals[rule] = totals.get(rule, 0) + count
+        totals["counts"][rule] = totals["counts"].get(rule, 0) + count
+        totals["files"].setdefault(rule, set()).add(path.name)
 
 
 def main() -> None:
@@ -59,14 +60,17 @@ def main() -> None:
         sys.stderr.write(f"not found: {target}\n")
         sys.exit(1)
 
-    totals: dict[str, int] = {}
+    totals: dict[str, dict] = {"counts": {}, "files": {}}
     if target.is_file():
         analyze_file(target, totals)
     else:
         for file_path in sorted(p for p in target.iterdir() if p.is_file()):
             analyze_file(file_path, totals)
 
-    print(json.dumps(totals, indent=2, sort_keys=True))
+    files_by_rule = {rule: sorted(list(files)) for rule, files in totals["files"].items()}
+    output = {"counts": totals["counts"], "files": files_by_rule}
+    Path("evaluation_output.json").write_text(json.dumps(output, indent=2, sort_keys=True))
+    print(json.dumps(output, indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":

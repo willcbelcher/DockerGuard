@@ -118,8 +118,8 @@ func (e *RuleChecker) registerDefaultRules() {
 	// Rule WORKDIR_ROOT: Check for WORKDIR in root
 	e.registerRule("WORKDIR_ROOT", "WORKDIR should not be set to root directory", "medium", e.checkWorkdirRoot)
 
-	// Rule CMD_NOT_EXEC_FORM: Check for CMD/ENTRYPOINT security
-	e.registerRule("CMD_NOT_EXEC_FORM", "CMD/ENTRYPOINT should use exec form for better signal handling", "low", e.checkCmdForm)
+	// Rule CURL_BASHING: Detect piping curl/wget output into a shell
+	e.registerRule("CURL_BASHING", "Avoid piping curl/wget output directly into a shell; verify downloads first", "high", e.checkCurlBash)
 
 	// Rule SECRET: Check for exposed secrets (pattern-based and keyword-based in ENV/ARG)
 	e.registerRule("SECRET", "Secrets should not be hardcoded anywhere in the Dockerfile", "", e.checkSecrets)
@@ -331,23 +331,25 @@ func (e *RuleChecker) checkWorkdirRoot(df *dockerfile.Dockerfile) []types.Result
 	return results
 }
 
-func (e *RuleChecker) checkCmdForm(df *dockerfile.Dockerfile) []types.Result { // necessary?
+var curlBashRegex = regexp.MustCompile(`(?i)(curl|wget)[^|>]*[|>]`)
+
+// detect piping curl/wget output directly into a shell
+func (e *RuleChecker) checkCurlBash(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
 	for _, inst := range df.Instructions {
-		if inst.Type == "CMD" || inst.Type == "ENTRYPOINT" {
-			// Exec form uses JSON array: ["cmd", "arg"]
-			// Shell form uses string: cmd arg
-			args := strings.TrimSpace(inst.Args)
-			if !strings.HasPrefix(args, "[") {
-				results = append(results, createResult(
-					"CMD_NOT_EXEC_FORM",
-					"low",
-					fmt.Sprintf("%s should use exec form (JSON array) for better signal handling", inst.Type),
-					inst.Line,
-					inst.Raw,
-				))
-			}
+		if inst.Type != "RUN" {
+			continue
+		}
+
+		if curlBashRegex.MatchString(inst.Raw) {
+			results = append(results, createResult(
+				"CURL_BASHING",
+				"high",
+				"Avoid curl/wget piping into a shell, use trusted sources and verify integrity",
+				inst.Line,
+				inst.Raw,
+			))
 		}
 	}
 

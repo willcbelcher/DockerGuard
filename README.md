@@ -203,6 +203,8 @@ DockerGuard includes a comprehensive set of built-in security rules organized by
   - Checks if container runs as root (UID 0) or if no USER instruction is present
 - **RUN_PRIV_ESC**: RUN instructions should not contain privilege escalation
   - Detects use of `sudo` or `su` commands in RUN instructions
+- **CURL_BASHING**: Avoid piping curl/wget output directly into a shell
+  - Flags `curl`/`wget` commands that pipe or redirect output to a shell without verification
 
 - #### Medium Severity
 - **BASE_IMAGE_LATEST**: Base image should not use 'latest' tag
@@ -223,14 +225,12 @@ DockerGuard includes a comprehensive set of built-in security rules organized by
   - Informational check for exposed ports
 - **MISSING_HEALTHCHECK**: Consider adding HEALTHCHECK instruction
   - Recommends adding healthcheck for better container orchestration
-- **CMD_NOT_EXEC_FORM**: CMD/ENTRYPOINT should use exec form (JSON array)
-  - Recommends exec form `["cmd", "arg"]` over shell form for better signal handling
 
 ### Extending Rules
 
 The rule engine is designed for easy extension. To add a new rule:
 
-1. **Create a check function** in `internal/rules/engine.go`:
+1. **Create a check function** in `internal/rules/checker.go`:
 
    ```go
    func (e *RuleChecker) checkYourNewRule(df *dockerfile.Dockerfile) []types.Result {
@@ -285,6 +285,7 @@ func (e *RuleChecker) checkExampleRule(df *dockerfile.Dockerfile) []types.Result
 | SECRET | Critical/High | Hardcoded secrets detected (pattern-based and keyword-based) |
 | BASE_IMAGE_LATEST | Medium | Base image uses 'latest' tag |
 | RUN_PRIV_ESC | High | Privilege escalation in RUN |
+| CURL_BASHING | High | Piping curl/wget output into a shell |
 | PKG_MGR_BEST_PRACTICE | Medium | Insecure package manager usage |
 | APT_INSTALL_NO_UPDATE | Low | apt-get update best practice |
 | UNVERIFIED_DOWNLOAD | Medium | Unverified downloads |
@@ -292,7 +293,6 @@ func (e *RuleChecker) checkExampleRule(df *dockerfile.Dockerfile) []types.Result
 | EXPOSE_DOCUMENTATION | Low | EXPOSE port documentation |
 | MISSING_HEALTHCHECK | Low | Missing HEALTHCHECK |
 | WORKDIR_ROOT | Medium | WORKDIR set to root |
-| CMD_NOT_EXEC_FORM | Low | CMD/ENTRYPOINT form |
 
 ### Helper Functions Reference
 

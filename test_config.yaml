@@ -1,5 +1,5 @@
 rules:
   ROOT_USER:
     disabled: true
-  SECRET_ENV_ARG:
+  SECRET:
     severity: "low"

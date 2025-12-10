@@ -6,7 +6,7 @@ FROM ubuntu:latest
 # Issue: Running as root (ROOT_USER)
 RUN apt-get update && apt-get install -y curl
 
-# Issue: Hardcoded secret (SECRET_ENV_ARG, SECRET)
+# Issue: Hardcoded secret (SECRET)
 ENV API_KEY=sk_live_1234567890abcdef
 ENV PASSWORD=mysecretpassword123
 

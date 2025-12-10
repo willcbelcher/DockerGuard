@@ -91,9 +91,6 @@ func (e *Engine) registerDefaultRules() {
 	// Rule ROOT_USER: Check if running as root
 	e.registerRule("ROOT_USER", "Container should not run as root user", "high", e.checkRootUser)
 
-	// Rule SECRET_ENV_ARG: Check for exposed secrets in ENV/ARG
-	e.registerRule("SECRET_ENV_ARG", "Secrets should not be hardcoded in ENV/ARG instructions", "critical", e.checkHardcodedSecrets)
-
 	// Rule BASE_IMAGE_LATEST: Check for latest tag
 	e.registerRule("BASE_IMAGE_LATEST", "Base image should not use 'latest' tag", "medium", e.checkLatestTag)
 
@@ -113,7 +110,7 @@ func (e *Engine) registerDefaultRules() {
 	e.registerRule("ADD_INSTEAD_OF_COPY", "Use COPY instead of ADD unless you need ADD's special features", "medium", e.checkAddVsCopy)
 
 	// Rule EXPOSE_DOCUMENTATION: Check for exposed ports
-	e.registerRule("EXPOSE_DOCUMENTATION", "EXPOSE should be documented and necessary", "low", e.checkExposedPorts)
+	e.registerRule("EXPOSE_DOCUMENTATION", "EXPOSE should be documented and necessary", "low", e.checkExposedPorts) // TODO: rename to EXPOSED_PORTS
 
 	// Rule MISSING_HEALTHCHECK: Check for healthcheck
 	e.registerRule("MISSING_HEALTHCHECK", "Consider adding HEALTHCHECK instruction", "low", e.checkHealthcheck)
@@ -124,7 +121,7 @@ func (e *Engine) registerDefaultRules() {
 	// Rule CMD_NOT_EXEC_FORM: Check for CMD/ENTRYPOINT security
 	e.registerRule("CMD_NOT_EXEC_FORM", "CMD/ENTRYPOINT should use exec form for better signal handling", "low", e.checkCmdForm)
 
-	// Rule SECRET: Pattern-based secret detection
+	// Rule SECRET: Check for exposed secrets (pattern-based and keyword-based in ENV/ARG)
 	e.registerRule("SECRET", "Secrets should not be hardcoded anywhere in the Dockerfile", "", e.checkSecrets)
 }
 
@@ -138,7 +135,6 @@ func (e *Engine) registerRule(id, description, severity string, checkFunc func(*
 	})
 }
 
-// checkRootUser checks if container runs as root
 func (e *Engine) checkRootUser(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 	effectiveUser, lastUserLine, lastUserContext := getEffectiveUser(df)
@@ -161,43 +157,7 @@ func (e *Engine) checkRootUser(df *dockerfile.Dockerfile) []types.Result {
 	return results
 }
 
-// checkHardcodedSecrets checks for secrets in ENV/ARG instructions
-func (e *Engine) checkHardcodedSecrets(df *dockerfile.Dockerfile) []types.Result {
-	var results []types.Result
-	secretKeywords := []string{"password", "secret", "key", "token", "api_key", "apikey", "credential", "auth"}
 
-	for _, inst := range df.Instructions {
-		if inst.Type == "ENV" || inst.Type == "ARG" {
-			// Skip if it looks like a variable reference (e.g. $VAR or ${VAR})
-			if strings.Contains(inst.Args, "$") {
-				continue
-			}
-
-			// Skip ARG declarations without default value (e.g. ARG API_KEY)
-			if inst.Type == "ARG" && !strings.Contains(inst.Args, "=") {
-				continue
-			}
-
-			lowerArgs := strings.ToLower(inst.Args)
-			for _, keyword := range secretKeywords {
-				if strings.Contains(lowerArgs, keyword) {
-					results = append(results, createResult(
-						"SECRET_ENV_ARG",
-						"critical",
-						fmt.Sprintf("Potential secret found in %s instruction", inst.Type),
-						inst.Line,
-						inst.Raw,
-					))
-					break // Avoid duplicate results for same instruction
-				}
-			}
-		}
-	}
-
-	return results
-}
-
-// checkLatestTag checks if base image uses latest tag
 func (e *Engine) checkLatestTag(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
@@ -218,7 +178,7 @@ func (e *Engine) checkLatestTag(df *dockerfile.Dockerfile) []types.Result {
 	return results
 }
 
-// checkPrivilegeEscalation checks RUN instructions for privilege escalation
+// checks RUN instructions for privilege escalation
 func (e *Engine) checkPrivilegeEscalation(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
@@ -237,7 +197,7 @@ func (e *Engine) checkPrivilegeEscalation(df *dockerfile.Dockerfile) []types.Res
 	return results
 }
 
-// checkPackageManager checks for insecure package manager usage
+// check for insecure package manager usage
 func (e *Engine) checkPackageManager(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
@@ -322,7 +282,6 @@ func (e *Engine) checkAddVsCopy(df *dockerfile.Dockerfile) []types.Result {
 	return results
 }
 
-// checkExposedPorts checks for exposed ports
 func (e *Engine) checkExposedPorts(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
@@ -332,12 +291,9 @@ func (e *Engine) checkExposedPorts(df *dockerfile.Dockerfile) []types.Result {
 		return results
 	}
 
-	// Check if ports are documented (this is a best practice check)
-	// In a real implementation, you might want to check if ports match CMD/ENTRYPOINT
 	return results
 }
 
-// checkHealthcheck checks if HEALTHCHECK is present
 func (e *Engine) checkHealthcheck(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
@@ -354,7 +310,6 @@ func (e *Engine) checkHealthcheck(df *dockerfile.Dockerfile) []types.Result {
 	return results
 }
 
-// checkWorkdirRoot checks if WORKDIR is set to root
 func (e *Engine) checkWorkdirRoot(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
@@ -376,8 +331,7 @@ func (e *Engine) checkWorkdirRoot(df *dockerfile.Dockerfile) []types.Result {
 	return results
 }
 
-// checkCmdForm checks if CMD/ENTRYPOINT use exec form
-func (e *Engine) checkCmdForm(df *dockerfile.Dockerfile) []types.Result {
+func (e *Engine) checkCmdForm(df *dockerfile.Dockerfile) []types.Result { // necessary?
 	var results []types.Result
 
 	for _, inst := range df.Instructions {
@@ -400,11 +354,12 @@ func (e *Engine) checkCmdForm(df *dockerfile.Dockerfile) []types.Result {
 	return results
 }
 
-// checkSecrets performs regex-based secret detection (was previously in secrets.Scanner)
 func (e *Engine) checkSecrets(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
+	secretKeywords := []string{"password", "secret", "key", "token", "api_key", "apikey", "credential", "auth"}
 
 	for _, inst := range df.Instructions {
+		// Check for pattern-based secrets (regex patterns) in all instructions
 		for _, pattern := range secretPatterns {
 			if pattern.Pattern.MatchString(inst.Raw) {
 				// Use pattern severity unless overridden by config in Check()
@@ -417,12 +372,39 @@ func (e *Engine) checkSecrets(df *dockerfile.Dockerfile) []types.Result {
 				})
 			}
 		}
+
+		// Check for keyword-based secrets in ENV/ARG instructions
+		if inst.Type == "ENV" || inst.Type == "ARG" {
+			// Skip if it looks like a variable reference (e.g. $VAR or ${VAR})
+			if strings.Contains(inst.Args, "$") {
+				continue
+			}
+
+			// Skip ARG declarations without default value (e.g. ARG API_KEY)
+			if inst.Type == "ARG" && !strings.Contains(inst.Args, "=") {
+				continue
+			}
+
+			lowerArgs := strings.ToLower(inst.Args)
+			for _, keyword := range secretKeywords {
+				if strings.Contains(lowerArgs, keyword) {
+					results = append(results, createResult(
+						"SECRET",
+						"critical",
+						fmt.Sprintf("Potential secret found in %s instruction", inst.Type),
+						inst.Line,
+						inst.Raw,
+					))
+					break // Avoid duplicate results for same instruction
+				}
+			}
+		}
 	}
 
 	return results
 }
 
-// ApplyConfig applies configuration to the rules
+// applies configuration to the rules
 func (e *Engine) ApplyConfig(cfg *config.Config) {
 	for i := range e.rules {
 		rule := &e.rules[i]

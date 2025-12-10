@@ -136,11 +136,11 @@ Analyze a Dockerfile:
 
 ```
 [high] ROOT_USER: No USER instruction found - container will run as root
-[critical] SECRET_ENV_ARG: Potential secret found in ENV instruction
+[critical] SECRET: Potential secret found in ENV instruction
   Line 5: ENV API_KEY=sk_live_1234567890abcdef
-[medium] BASE_IMAGE_LATEST: Base image uses 'latest' tag or no tag specified
 [critical] SECRET: Potential AWS Access Key detected
   Line 5: ENV API_KEY=sk_live_1234567890abcdef
+[medium] BASE_IMAGE_LATEST: Base image uses 'latest' tag or no tag specified
 [medium] ADD_INSTEAD_OF_COPY: Use COPY instead of ADD for local files
   Line 8: ADD app.py /app/
 [low] MISSING_HEALTHCHECK: Consider adding HEALTHCHECK instruction for better container orchestration
@@ -188,14 +188,15 @@ DockerGuard includes a comprehensive set of built-in security rules organized by
 ### Rule Categories
 
 #### Critical Severity
-- **SECRET_ENV_ARG**: Secrets should not be hardcoded in ENV/ARG instructions
-  - Detects potential secrets in environment variables and build arguments
-  - Keywords: password, secret, key, token, api_key, credential, auth
-  - Checks
+- **SECRET**: Secrets should not be hardcoded anywhere in the Dockerfile
+  - Detects potential secrets using both pattern-based and keyword-based detection
+  - **Pattern-based detection** (checks all instructions):
     - **AWS Access Keys**: `AKIA[0-9A-Z]{16}` pattern
     - **API Keys**: Generic patterns for `api_key`, `apikey` with values
     - **Private Keys**: PEM format private keys (RSA, DSA, EC, OpenSSH)
     - **Passwords**: Password patterns in environment variables
+  - **Keyword-based detection** (checks ENV/ARG instructions):
+    - Keywords: password, secret, key, token, api_key, credential, auth
 
 - #### High Severity
 - **ROOT_USER**: Container should not run as root user
@@ -281,7 +282,7 @@ func (e *Engine) checkExampleRule(df *dockerfile.Dockerfile) []types.Result {
 | ID | Severity | Description |
 |----|----------|-------------|
 | ROOT_USER | High | Container runs as root user |
-| SECRET_ENV_ARG | Critical | Hardcoded secrets in ENV/ARG |
+| SECRET | Critical/High | Hardcoded secrets detected (pattern-based and keyword-based) |
 | BASE_IMAGE_LATEST | Medium | Base image uses 'latest' tag |
 | RUN_PRIV_ESC | High | Privilege escalation in RUN |
 | PKG_MGR_BEST_PRACTICE | Medium | Insecure package manager usage |
@@ -292,7 +293,6 @@ func (e *Engine) checkExampleRule(df *dockerfile.Dockerfile) []types.Result {
 | MISSING_HEALTHCHECK | Low | Missing HEALTHCHECK |
 | WORKDIR_ROOT | Medium | WORKDIR set to root |
 | CMD_NOT_EXEC_FORM | Low | CMD/ENTRYPOINT form |
-| SECRET | Critical/High | Secret pattern detected |
 
 ### Helper Functions Reference
 

@@ -104,7 +104,7 @@ func (e *RuleChecker) registerDefaultRules() {
 	e.registerRule("APT_INSTALL_NO_UPDATE", "apt-get install should be combined with apt-get update", "low", e.checkAptGetUpdate)
 
 	// Rule UNVERIFIED_DOWNLOAD: Check for unverified downloads
-	e.registerRule("UNVERIFIED_DOWNLOAD", "Downloads should be verified with checksums or signatures", "medium", e.checkUnverifiedDownloads)
+	// e.registerRule("UNVERIFIED_DOWNLOAD", "Downloads should be verified with checksums or signatures", "medium", e.checkUnverifiedDownloads)
 
 	// Rule ADD_INSTEAD_OF_COPY: Check for ADD vs COPY
 	e.registerRule("ADD_INSTEAD_OF_COPY", "Use COPY instead of ADD unless you need ADD's special features", "medium", e.checkAddVsCopy)
@@ -236,23 +236,23 @@ func (e *RuleChecker) checkAptGetUpdate(df *dockerfile.Dockerfile) []types.Resul
 }
 
 // checkUnverifiedDownloads checks for unverified downloads
-func (e *RuleChecker) checkUnverifiedDownloads(df *dockerfile.Dockerfile) []types.Result {
-	var results []types.Result
+// func (e *RuleChecker) checkUnverifiedDownloads(df *dockerfile.Dockerfile) []types.Result {
+// 	var results []types.Result
 
-	for _, inst := range df.Instructions {
-		if inst.Type == "RUN" {
-			runResults := checkRunInstruction(inst)
-			// Filter for download verification issues only
-			for _, r := range runResults {
-				if r.RuleID == "UNVERIFIED_DOWNLOAD" {
-					results = append(results, r)
-				}
-			}
-		}
-	}
+// 	for _, inst := range df.Instructions {
+// 		if inst.Type == "RUN" {
+// 			runResults := checkRunInstruction(inst)
+// 			// Filter for download verification issues only
+// 			for _, r := range runResults {
+// 				if r.RuleID == "UNVERIFIED_DOWNLOAD" {
+// 					results = append(results, r)
+// 				}
+// 			}
+// 		}
+// 	}
 
-	return results
-}
+// 	return results
+// }
 
 // checkAddVsCopy checks for ADD usage (should prefer COPY)
 func (e *RuleChecker) checkAddVsCopy(df *dockerfile.Dockerfile) []types.Result {

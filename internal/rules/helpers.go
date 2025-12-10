@@ -108,7 +108,6 @@ func checkRunInstruction(inst dockerfile.Instruction) []types.Result {
 		))
 	}
 
-	// Check for apt-get without update
 	if strings.Contains(args, "apt-get install") && !strings.Contains(args, "apt-get update") {
 		// Check if update was done in a previous RUN
 		results = append(results, createResult(
@@ -120,19 +119,18 @@ func checkRunInstruction(inst dockerfile.Instruction) []types.Result {
 		))
 	}
 
-	// Check for curl/wget without verification
-	if (strings.Contains(args, "curl") || strings.Contains(args, "wget")) &&
-		!strings.Contains(args, "sha256sum") &&
-		!strings.Contains(args, "gpg") &&
-		!strings.Contains(args, "checksum") {
-		results = append(results, createResult(
-			"UNVERIFIED_DOWNLOAD",
-			"medium",
-			"Downloading files with curl/wget without verification (checksum or signature)",
-			inst.Line,
-			inst.Raw,
-		))
-	}
+	// if (strings.Contains(args, "curl") || strings.Contains(args, "wget")) &&
+	// 	!strings.Contains(args, "sha256sum") &&
+	// 	!strings.Contains(args, "gpg") &&
+	// 	!strings.Contains(args, "checksum") {
+	// 	results = append(results, createResult(
+	// 		"UNVERIFIED_DOWNLOAD",
+	// 		"medium",
+	// 		"Downloading files with curl/wget without verification (checksum or signature)",
+	// 		inst.Line,
+	// 		inst.Raw,
+	// 	))
+	// }
 
 	return results
 }

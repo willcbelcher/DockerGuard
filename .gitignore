@@ -31,3 +31,6 @@ Thumbs.db
 
 # python
 venv/
+
+# sample data files
+sample_data/general

@@ -14,7 +14,7 @@ import (
 // Analyzer performs static analysis on Dockerfiles
 type Analyzer struct {
 	verbose    bool
-	ruleEngine *rules.Engine
+	ruleChecker *rules.RuleChecker
 }
 
 // NewAnalyzer creates a new analyzer instance
@@ -24,12 +24,12 @@ func NewAnalyzer(verbose bool, configPath string) (*Analyzer, error) {
 		return nil, err
 	}
 
-	engine := rules.NewEngine()
-	engine.ApplyConfig(cfg)
+	checker := rules.NewRuleChecker()
+	checker.ApplyConfig(cfg)
 
 	return &Analyzer{
-		verbose:    verbose,
-		ruleEngine: engine,
+		verbose:     verbose,
+		ruleChecker: checker,
 	}, nil
 }
 
@@ -49,7 +49,7 @@ func (a *Analyzer) Analyze(filePath string) ([]types.Result, error) {
 	var results []types.Result
 
 	// Run rule-based checks
-	ruleResults := a.ruleEngine.Check(df)
+	ruleResults := a.ruleChecker.Check(df)
 	results = append(results, ruleResults...)
 
 	// Check base image vulnerabilities
@@ -60,7 +60,7 @@ func (a *Analyzer) Analyze(filePath string) ([]types.Result, error) {
 		} else {
 			// Recursively analyze the base image
 			// Run rule-based checks on base image
-			baseRuleResults := a.ruleEngine.Check(baseDf)
+			baseRuleResults := a.ruleChecker.Check(baseDf)
 			for _, res := range baseRuleResults {
 				res.Message = fmt.Sprintf("[Base Image: %s] %s", df.BaseImage, res.Message)
 				results = append(results, res)

@@ -7,7 +7,7 @@ This project is for CS2630, Systems Security at Harvard University.
 ## Features
 
 - **Static Analysis**: Analyzes Dockerfiles for security issues before building images
-- **Comprehensive Rule Engine**: 12+ built-in security rules covering:
+- **Comprehensive Rule Checker**: 12+ built-in security rules covering:
   - User privileges and root access
   - Secret management
   - Package manager security
@@ -158,8 +158,8 @@ DockerGuard/
 │   ├── dockerfile/       # Dockerfile parser (converts text to structured format, reconstructs base images)
 │   ├── config/           # Configuration file parsing
 │   ├── registry/         # Docker Registry API client (base image vulnerability checks)
-│   ├── rules/            # Security rule engine
-│   │   ├── engine.go     # Rule engine and rule definitions
+│   ├── rules/            
+│   │   ├── checker.go    # Rule manager definitions
 │   │   └── helpers.go    # Helper functions for rule creation
 │   └── types/            # Shared types (prevents import cycles)
 ├── examples/             # Example Dockerfiles for testing
@@ -233,7 +233,7 @@ The rule engine is designed for easy extension. To add a new rule:
 1. **Create a check function** in `internal/rules/engine.go`:
 
    ```go
-   func (e *Engine) checkYourNewRule(df *dockerfile.Dockerfile) []types.Result {
+   func (e *RuleChecker) checkYourNewRule(df *dockerfile.Dockerfile) []types.Result {
        var results []types.Result
        // Your rule logic here
        return results
@@ -256,7 +256,7 @@ The rule engine is designed for easy extension. To add a new rule:
 Example rule implementation:
 
 ```go
-func (e *Engine) checkExampleRule(df *dockerfile.Dockerfile) []types.Result {
+func (e *RuleChecker) checkExampleRule(df *dockerfile.Dockerfile) []types.Result {
     var results []types.Result
 
     for _, inst := range df.Instructions {

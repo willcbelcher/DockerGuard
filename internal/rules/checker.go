@@ -39,8 +39,8 @@ var secretPatterns = []secretPattern{
 	},
 }
 
-// Engine manages and executes security rules
-type Engine struct {
+// RuleChecker manages and executes security rules
+type RuleChecker struct {
 	rules []Rule
 }
 
@@ -53,20 +53,20 @@ type Rule struct {
 	Check       func(*dockerfile.Dockerfile) []types.Result
 }
 
-// NewEngine creates a new rule engine with default rules
-func NewEngine() *Engine {
-	engine := &Engine{
+// NewRuleChecker creates a new rule checker with default rules
+func NewRuleChecker() *RuleChecker {
+	checker := &RuleChecker{
 		rules: []Rule{},
 	}
 
 	// Register default rules
-	engine.registerDefaultRules()
+	checker.registerDefaultRules()
 
-	return engine
+	return checker
 }
 
 // Check runs all rules against the Dockerfile
-func (e *Engine) Check(df *dockerfile.Dockerfile) []types.Result {
+func (e *RuleChecker) Check(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
 	for _, rule := range e.rules {
@@ -87,7 +87,7 @@ func (e *Engine) Check(df *dockerfile.Dockerfile) []types.Result {
 }
 
 // registerDefaultRules registers built-in security rules
-func (e *Engine) registerDefaultRules() {
+func (e *RuleChecker) registerDefaultRules() {
 	// Rule ROOT_USER: Check if running as root
 	e.registerRule("ROOT_USER", "Container should not run as root user", "high", e.checkRootUser)
 
@@ -126,7 +126,7 @@ func (e *Engine) registerDefaultRules() {
 }
 
 // registerRule is a helper to register rules
-func (e *Engine) registerRule(id, description, severity string, checkFunc func(*dockerfile.Dockerfile) []types.Result) {
+func (e *RuleChecker) registerRule(id, description, severity string, checkFunc func(*dockerfile.Dockerfile) []types.Result) {
 	e.rules = append(e.rules, Rule{
 		ID:          id,
 		Description: description,
@@ -135,7 +135,7 @@ func (e *Engine) registerRule(id, description, severity string, checkFunc func(*
 	})
 }
 
-func (e *Engine) checkRootUser(df *dockerfile.Dockerfile) []types.Result {
+func (e *RuleChecker) checkRootUser(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 	effectiveUser, lastUserLine, lastUserContext := getEffectiveUser(df)
 
@@ -158,7 +158,7 @@ func (e *Engine) checkRootUser(df *dockerfile.Dockerfile) []types.Result {
 }
 
 
-func (e *Engine) checkLatestTag(df *dockerfile.Dockerfile) []types.Result {
+func (e *RuleChecker) checkLatestTag(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
 	if df.BaseImage == "" {
@@ -179,7 +179,7 @@ func (e *Engine) checkLatestTag(df *dockerfile.Dockerfile) []types.Result {
 }
 
 // checks RUN instructions for privilege escalation
-func (e *Engine) checkPrivilegeEscalation(df *dockerfile.Dockerfile) []types.Result {
+func (e *RuleChecker) checkPrivilegeEscalation(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
 	for _, inst := range df.Instructions {
@@ -198,7 +198,7 @@ func (e *Engine) checkPrivilegeEscalation(df *dockerfile.Dockerfile) []types.Res
 }
 
 // check for insecure package manager usage
-func (e *Engine) checkPackageManager(df *dockerfile.Dockerfile) []types.Result {
+func (e *RuleChecker) checkPackageManager(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
 	for _, inst := range df.Instructions {
@@ -217,7 +217,7 @@ func (e *Engine) checkPackageManager(df *dockerfile.Dockerfile) []types.Result {
 }
 
 // checkAptGetUpdate checks if apt-get install is properly combined with update
-func (e *Engine) checkAptGetUpdate(df *dockerfile.Dockerfile) []types.Result {
+func (e *RuleChecker) checkAptGetUpdate(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
 	for _, inst := range df.Instructions {
@@ -236,7 +236,7 @@ func (e *Engine) checkAptGetUpdate(df *dockerfile.Dockerfile) []types.Result {
 }
 
 // checkUnverifiedDownloads checks for unverified downloads
-func (e *Engine) checkUnverifiedDownloads(df *dockerfile.Dockerfile) []types.Result {
+func (e *RuleChecker) checkUnverifiedDownloads(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
 	for _, inst := range df.Instructions {
@@ -255,7 +255,7 @@ func (e *Engine) checkUnverifiedDownloads(df *dockerfile.Dockerfile) []types.Res
 }
 
 // checkAddVsCopy checks for ADD usage (should prefer COPY)
-func (e *Engine) checkAddVsCopy(df *dockerfile.Dockerfile) []types.Result {
+func (e *RuleChecker) checkAddVsCopy(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
 	for _, inst := range df.Instructions {
@@ -282,7 +282,7 @@ func (e *Engine) checkAddVsCopy(df *dockerfile.Dockerfile) []types.Result {
 	return results
 }
 
-func (e *Engine) checkExposedPorts(df *dockerfile.Dockerfile) []types.Result {
+func (e *RuleChecker) checkExposedPorts(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
 	exposedPorts := findInstructions(df, "EXPOSE")
@@ -294,7 +294,7 @@ func (e *Engine) checkExposedPorts(df *dockerfile.Dockerfile) []types.Result {
 	return results
 }
 
-func (e *Engine) checkHealthcheck(df *dockerfile.Dockerfile) []types.Result {
+func (e *RuleChecker) checkHealthcheck(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
 	if !hasInstruction(df, "HEALTHCHECK") {
@@ -310,7 +310,7 @@ func (e *Engine) checkHealthcheck(df *dockerfile.Dockerfile) []types.Result {
 	return results
 }
 
-func (e *Engine) checkWorkdirRoot(df *dockerfile.Dockerfile) []types.Result {
+func (e *RuleChecker) checkWorkdirRoot(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 
 	for _, inst := range df.Instructions {
@@ -331,7 +331,7 @@ func (e *Engine) checkWorkdirRoot(df *dockerfile.Dockerfile) []types.Result {
 	return results
 }
 
-func (e *Engine) checkCmdForm(df *dockerfile.Dockerfile) []types.Result { // necessary?
+func (e *RuleChecker) checkCmdForm(df *dockerfile.Dockerfile) []types.Result { // necessary?
 	var results []types.Result
 
 	for _, inst := range df.Instructions {
@@ -354,7 +354,7 @@ func (e *Engine) checkCmdForm(df *dockerfile.Dockerfile) []types.Result { // nec
 	return results
 }
 
-func (e *Engine) checkSecrets(df *dockerfile.Dockerfile) []types.Result {
+func (e *RuleChecker) checkSecrets(df *dockerfile.Dockerfile) []types.Result {
 	var results []types.Result
 	secretKeywords := []string{"password", "secret", "key", "token", "api_key", "apikey", "credential", "auth"}
 
@@ -405,7 +405,7 @@ func (e *Engine) checkSecrets(df *dockerfile.Dockerfile) []types.Result {
 }
 
 // applies configuration to the rules
-func (e *Engine) ApplyConfig(cfg *config.Config) {
+func (e *RuleChecker) ApplyConfig(cfg *config.Config) {
 	for i := range e.rules {
 		rule := &e.rules[i]
 		if ruleConfig, ok := cfg.Rules[rule.ID]; ok {
